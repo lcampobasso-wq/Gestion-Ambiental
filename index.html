@@ -140,6 +140,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
 .ps-table { width: 100%; min-width: 780px; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
 .ps-table th { text-align: left; padding: 10px 14px; font-family: var(--ps-font-title); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--ps-muted); background: #f7fafc; border-bottom: 1px solid var(--ps-border); white-space: nowrap; }
 .ps-table td { padding: 11px 14px; border-bottom: 1px solid var(--ps-border); color: var(--ps-text); vertical-align: top; }
+#tbody-residuos td { vertical-align: middle; }
 .ps-table tr:last-child td { border-bottom: none; }
 .ps-table tr:hover td { background: #f7fafc; }
 .ps-td-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; }
@@ -685,8 +686,10 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
                 <th class="col-estado">Cantidad (kg)</th>
                 <th class="col-alcance">Operador</th>
                 <th class="col-alcance">Disposición final</th>
+                <th class="col-responsable">N° Manifiesto</th>
                 <th class="col-evidencia">Manifiesto</th>
-                <th style="width:60px;"></th>
+                <th class="col-evidencia">Cert. disposición final</th>
+                <th style="width:70px;"></th>
               </tr>
             </thead>
             <tbody id="tbody-residuos"></tbody>
@@ -1065,6 +1068,26 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
   </main>
 </div>
 
+<!-- MODAL: ADJUNTOS MÚLTIPLES (genérico, compartido en toda la app) -->
+<div class="ps-modal-overlay" id="modal-adjuntos">
+  <div class="ps-modal">
+    <div class="ps-modal-header">
+      <div class="ps-modal-title">Archivos adjuntos</div>
+      <button class="ps-modal-close" onclick="cerrarModalAdjuntos()">✕</button>
+    </div>
+    <div class="ps-modal-body">
+      <div id="adj-modal-lista"></div>
+      <label class="ps-file-btn" style="margin-bottom:0;align-self:flex-start;">
+        + Agregar archivo
+        <input type="file" id="adj-modal-file" onchange="agregarAdjuntoModal(this)">
+      </label>
+    </div>
+    <div class="ps-modal-footer">
+      <button class="ps-btn ps-btn-primary" onclick="cerrarModalAdjuntos()">Listo</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: NUEVO REQUISITO -->
 <div class="ps-modal-overlay" id="modal-requisito">
   <div class="ps-modal">
@@ -1408,9 +1431,10 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
         <input class="ps-input" id="r-operador" placeholder="Ej: Ambiental del Sur SRL" style="width:100%;">
       </div>
       <div class="ps-field">
-        <label>N° de manifiesto (evidencia)</label>
+        <label>N° de manifiesto</label>
         <input class="ps-input" id="r-manifiesto" placeholder="Opcional" style="width:100%;">
       </div>
+      <div style="font-size:11px;color:var(--ps-muted);">El manifiesto (archivo) y el certificado de disposición final se adjuntan desde la tabla, con el ícono 📎.</div>
     </div>
     <div class="ps-modal-footer">
       <button class="ps-btn" onclick="cerrarModalResiduo()">Cancelar</button>
@@ -1641,6 +1665,91 @@ async function subirArchivoGA(archivo, carpeta) {
   return `${GA_SUPABASE_URL}/storage/v1/object/public/${GA_STORAGE_BUCKET}/${path}`;
 }
 
+/* ══════════════ ADJUNTOS MÚLTIPLES (genérico, reutilizado en toda la app) ══════════════ */
+const GA_TABLA_ADJUNTOS = `${GA_SUPABASE_URL}/rest/v1/adjuntos`;
+let _adjTabla = null, _adjRegistroId = null, _adjCarpeta = null, _adjOnCambio = null, _adjOnAdd = null;
+
+// Trae de una sola vez todos los adjuntos de un "tabla" (tipo de campo) — evita 1 consulta por fila.
+async function cargarAdjuntosDeTipo(tabla) {
+  try {
+    const resp = await fetch(`${GA_TABLA_ADJUNTOS}?select=*&tabla=eq.${tabla}`, { headers: gaHeaders() });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    return await resp.json();
+  } catch (err) {
+    return [];
+  }
+}
+
+// Botón compacto "📎 N" que va en la celda de la tabla. `cache` es el array ya cargado con cargarAdjuntosDeTipo.
+function botonAdjuntos(tabla, registroId, carpeta, cache) {
+  const n = cache.filter(a => a.registro_id === registroId).length;
+  return `<button class="ps-btn" style="padding:4px 10px;font-size:11px;" onclick="abrirModalAdjuntos('${tabla}','${registroId}','${carpeta}')">📎 ${n}</button>`;
+}
+
+function abrirModalAdjuntos(tabla, registroId, carpeta, onCambio, onAdd) {
+  _adjTabla = tabla;
+  _adjRegistroId = registroId;
+  _adjCarpeta = carpeta;
+  _adjOnCambio = typeof onCambio === 'function' ? onCambio : window['refrescarAdjuntos_' + tabla];
+  _adjOnAdd = typeof onAdd === 'function' ? onAdd : null;
+  document.getElementById('adj-modal-file').value = '';
+  document.getElementById('modal-adjuntos').classList.add('active');
+  renderListaAdjuntosModal();
+}
+function cerrarModalAdjuntos() {
+  document.getElementById('modal-adjuntos').classList.remove('active');
+}
+
+async function renderListaAdjuntosModal() {
+  const cont = document.getElementById('adj-modal-lista');
+  cont.innerHTML = '<div style="color:var(--ps-muted);font-size:12px;">Cargando...</div>';
+  try {
+    const resp = await fetch(`${GA_TABLA_ADJUNTOS}?select=*&tabla=eq.${_adjTabla}&registro_id=eq.${_adjRegistroId}&order=uploaded_at.asc`, { headers: gaHeaders() });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const lista = await resp.json();
+    cont.innerHTML = lista.length ? lista.map(a => `
+      <div class="ps-item-chip">
+        <a href="${a.url}" target="_blank" class="ps-item-chip-text" style="color:#3182ce;text-decoration:none;">📄 ${a.nombre}</a>
+        <button class="ps-item-chip-remove" onclick="eliminarAdjunto('${a.id}')" title="Eliminar">✕</button>
+      </div>
+    `).join('') : '<div style="color:var(--ps-muted);font-size:12px;">Todavía no hay archivos adjuntos</div>';
+  } catch (err) {
+    cont.innerHTML = `<div style="color:#9b2c2c;font-size:12px;">No se pudo cargar (${err.message})</div>`;
+  }
+}
+
+async function agregarAdjuntoModal(inputEl) {
+  const archivo = inputEl.files[0];
+  if (!archivo) return;
+  try {
+    const url = await subirArchivoGA(archivo, _adjCarpeta);
+    const resp = await fetch(GA_TABLA_ADJUNTOS, {
+      method: 'POST',
+      headers: gaHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ tabla: _adjTabla, registro_id: _adjRegistroId, nombre: archivo.name, url }),
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    inputEl.value = '';
+    renderListaAdjuntosModal();
+    if (typeof _adjOnAdd === 'function') await _adjOnAdd();
+    if (typeof _adjOnCambio === 'function') await _adjOnCambio();
+  } catch (err) {
+    alert('No se pudo subir el archivo: ' + err.message);
+  }
+}
+
+async function eliminarAdjunto(id) {
+  if (!confirm('¿Eliminar este archivo adjunto? Esta acción no se puede deshacer.')) return;
+  try {
+    const resp = await fetch(`${GA_TABLA_ADJUNTOS}?id=eq.${id}`, { method: 'DELETE', headers: gaHeaders() });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    renderListaAdjuntosModal();
+    if (typeof _adjOnCambio === 'function') await _adjOnCambio();
+  } catch (err) {
+    alert('No se pudo eliminar: ' + err.message);
+  }
+}
+
 const titles = {
   dashboard: ['Dashboard', 'Requisitos, permisos y desempeño ambiental'],
   requisitos: ['Matriz de Requisitos Ambientales', 'Normativa por jurisdicción'],
@@ -1691,17 +1800,26 @@ function autoNivelPorJurisdiccion() {
   document.getElementById('f-nivel').value = nivelPorJurisdiccion(jurisdiccion);
 }
 
+let _adjCacheRequisitos = [];
 async function cargarRequisitos() {
   const tbody = document.getElementById('tbody-requisitos');
   tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--ps-muted);padding:20px;">Cargando matriz de requisitos...</td></tr>`;
   try {
-    const resp = await fetch(`${GA_TABLA_REQUISITOS}?select=*`, { headers: gaHeaders() });
+    const [resp, adj] = await Promise.all([
+      fetch(`${GA_TABLA_REQUISITOS}?select=*`, { headers: gaHeaders() }),
+      cargarAdjuntosDeTipo('requisitos_ambientales'),
+    ]);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     requisitos = await resp.json();
+    _adjCacheRequisitos = adj;
     renderRequisitos();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#9b2c2c;padding:20px;">No se pudo conectar con la base de datos (${err.message}). Revisá la conexión y volvé a intentar.</td></tr>`;
   }
+}
+async function refrescarAdjuntos_requisitos_ambientales() {
+  _adjCacheRequisitos = await cargarAdjuntosDeTipo('requisitos_ambientales');
+  renderRequisitos();
 }
 
 function renderRequisitos() {
@@ -1749,18 +1867,7 @@ function renderRequisitos() {
       <td><span class="ps-badge ${badgeClaseTipo(r.tipo)}">${r.tipo}</span></td>
       <td><span class="ps-badge ${badgeClaseEstado(r.estado)}">${r.estado}</span></td>
       <td style="white-space:nowrap;">
-        ${r.evidencia_url ? `
-          <a href="${r.evidencia_url}" target="_blank" title="Ver: ${r.evidencia_nombre}" style="font-size:17px;text-decoration:none;vertical-align:middle;color:#3182ce;">👁️</a>
-          <label class="ps-file-btn" style="margin-bottom:0;display:inline-flex;padding:4px 8px;font-size:10.5px;vertical-align:middle;margin-left:4px;">
-            Cambiar
-            <input type="file" onchange="adjuntarEvidenciaRequisito('${r.id}', this)">
-          </label>
-        ` : `
-          <label class="ps-file-btn" style="margin-bottom:0;">
-            📎 Adjuntar
-            <input type="file" onchange="adjuntarEvidenciaRequisito('${r.id}', this)">
-          </label>
-        `}
+        <button class="ps-btn" style="padding:4px 10px;font-size:11px;" onclick="abrirAdjuntosRequisito('${r.id}')">📎 ${_adjCacheRequisitos.filter(a => a.registro_id === r.id).length}</button>
       </td>
       <td style="white-space:nowrap;">
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="editarRequisito('${r.id}')" title="Editar">✏️</button>
@@ -1830,25 +1937,25 @@ async function eliminarRequisito(id) {
   }
 }
 
-async function adjuntarEvidenciaRequisito(id, inputEl) {
+function abrirAdjuntosRequisito(id) {
+  abrirModalAdjuntos('requisitos_ambientales', id, 'requisitos', refrescarAdjuntos_requisitos_ambientales, () => marcarCumplidoPorAdjuntoRequisito(id));
+}
+
+async function marcarCumplidoPorAdjuntoRequisito(id) {
   const r = requisitos.find(x => x.id === id);
-  if (!r) return;
-  const archivo = inputEl.files[0];
-  if (!archivo) return;
+  if (!r || r.estado === 'Cumplido') return;
   try {
-    const url = await subirArchivoGA(archivo, 'requisitos');
     const resp = await fetch(`${GA_TABLA_REQUISITOS}?id=eq.${id}`, {
       method: 'PATCH',
       headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
-      body: JSON.stringify({ evidencia_nombre: archivo.name, evidencia_url: url, estado: 'Cumplido' }),
+      body: JSON.stringify({ estado: 'Cumplido' }),
     });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const [actualizado] = await resp.json();
-    Object.assign(r, actualizado);
-    renderRequisitos();
-  } catch (err) {
-    alert('No se pudo adjuntar el archivo: ' + err.message);
-  }
+    if (resp.ok) {
+      const [actualizado] = await resp.json();
+      Object.assign(r, actualizado);
+      renderRequisitos();
+    }
+  } catch (err) { /* si falla, el requisito queda como estaba; no es crítico */ }
 }
 
 function cerrarModalRequisito() {
@@ -1877,7 +1984,7 @@ async function guardarRequisito() {
 
   // No se puede marcar "Cumplido" sin evidencia adjunta, salvo los requisitos Referenciales
   const anterior = _requisitoEditId ? requisitos.find(x => x.id === _requisitoEditId) : null;
-  const tieneEvidencia = !!(anterior && anterior.evidencia_url);
+  const tieneEvidencia = !!(_requisitoEditId && _adjCacheRequisitos.some(a => a.registro_id === _requisitoEditId));
   if (datos.estado === 'Cumplido' && datos.tipo !== 'Referencial' && !tieneEvidencia) {
     alert('Este requisito no tiene evidencia adjunta todavía. Adjuntala desde el ícono 📎 en la tabla — al hacerlo, se marca "Cumplido" automáticamente. (Los requisitos "Referencial" son la única excepción.)');
     return;
@@ -1978,17 +2085,26 @@ let _permisoEditId = null;
 
 const badgeClaseEstadoPermiso = e => e === 'Vigente' ? 'ps-badge-ok' : e === 'Por vencer' ? 'ps-badge-warn' : 'ps-badge-danger';
 
+let _adjCachePermisos = [];
 async function cargarPermisos() {
   const tbody = document.getElementById('tbody-permisos');
   tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando permisos...</td></tr>`;
   try {
-    const resp = await fetch(`${GA_TABLA_PERMISOS}?select=*&order=vencimiento.asc`, { headers: gaHeaders() });
+    const [resp, adj] = await Promise.all([
+      fetch(`${GA_TABLA_PERMISOS}?select=*&order=vencimiento.asc`, { headers: gaHeaders() }),
+      cargarAdjuntosDeTipo('permisos_ambientales'),
+    ]);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     permisos = await resp.json();
+    _adjCachePermisos = adj;
     renderPermisos();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
   }
+}
+async function refrescarAdjuntos_permisos_ambientales() {
+  _adjCachePermisos = await cargarAdjuntosDeTipo('permisos_ambientales');
+  renderPermisos();
 }
 
 function renderPermisos() {
@@ -2014,14 +2130,7 @@ function renderPermisos() {
       <td>${formatFecha(p.vencimiento)}</td>
       <td><span class="ps-badge ${badgeClaseEstadoPermiso(p.estadoCalc)}">${p.estadoCalc}</span></td>
       <td>
-        ${p.evidencia_url ? `
-          <a href="${p.evidencia_url}" target="_blank" title="Ver: ${p.evidencia_nombre}" style="font-size:16px;text-decoration:none;color:#3182ce;">👁️</a>
-          <label class="ps-file-btn" style="margin-bottom:0;display:inline-flex;padding:3px 7px;font-size:10px;margin-left:4px;">
-            Cambiar<input type="file" onchange="adjuntarEvidenciaPermiso('${p.id}', this)">
-          </label>
-        ` : `
-          <label class="ps-file-btn" style="margin-bottom:0;">📎 Adjuntar<input type="file" onchange="adjuntarEvidenciaPermiso('${p.id}', this)"></label>
-        `}
+        ${botonAdjuntos('permisos_ambientales', p.id, 'permisos', _adjCachePermisos)}
       </td>
       <td style="white-space:nowrap;">
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="editarPermiso('${p.id}')" title="Editar">✏️</button>
@@ -2096,25 +2205,7 @@ async function eliminarPermiso(id) {
   }
 }
 
-async function adjuntarEvidenciaPermiso(id, inputEl) {
-  const archivo = inputEl.files[0];
-  if (!archivo) return;
-  try {
-    const url = await subirArchivoGA(archivo, 'permisos');
-    const resp = await fetch(`${GA_TABLA_PERMISOS}?id=eq.${id}`, {
-      method: 'PATCH',
-      headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
-      body: JSON.stringify({ evidencia_nombre: archivo.name, evidencia_url: url }),
-    });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const [actualizado] = await resp.json();
-    const idx = permisos.findIndex(x => x.id === id);
-    if (idx !== -1) permisos[idx] = actualizado;
-    renderPermisos();
-  } catch (err) {
-    alert('No se pudo adjuntar el archivo: ' + err.message);
-  }
-}
+
 
 function cerrarModalPermiso() {
   document.getElementById('modal-permiso').classList.remove('active');
@@ -2521,17 +2612,32 @@ let chartResiduosActualInstance = null;
 const badgeClaseTipoResiduo = t => t === 'Peligroso' ? 'ps-badge-danger' : t === 'Especial' ? 'ps-badge-warn' : t === 'Reciclable' ? 'ps-badge-ok' : 'ps-badge-info';
 const mesesNombre = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
+let _adjCacheManifiestos = [], _adjCacheCertificados = [];
 async function cargarResiduos() {
   const tbody = document.getElementById('tbody-residuos');
-  tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando registros de residuos...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando registros de residuos...</td></tr>`;
   try {
-    const resp = await fetch(`${GA_TABLA_RESIDUOS}?select=*&order=fecha.desc`, { headers: gaHeaders() });
+    const [resp, adjM, adjC] = await Promise.all([
+      fetch(`${GA_TABLA_RESIDUOS}?select=*&order=fecha.desc`, { headers: gaHeaders() }),
+      cargarAdjuntosDeTipo('residuos_manifiesto'),
+      cargarAdjuntosDeTipo('residuos_certificado'),
+    ]);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     residuos = await resp.json();
+    _adjCacheManifiestos = adjM;
+    _adjCacheCertificados = adjC;
     renderResiduos();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
   }
+}
+async function refrescarAdjuntos_residuos_manifiesto() {
+  _adjCacheManifiestos = await cargarAdjuntosDeTipo('residuos_manifiesto');
+  renderResiduos();
+}
+async function refrescarAdjuntos_residuos_certificado() {
+  _adjCacheCertificados = await cargarAdjuntosDeTipo('residuos_certificado');
+  renderResiduos();
 }
 
 function cambiarVistaResiduos(vista) {
@@ -2595,7 +2701,13 @@ function renderResiduos() {
       <td><strong>${Number(r.cantidad).toLocaleString('es-AR')}</strong></td>
       <td><span class="ps-td-clamp" title="${r.operador||''}">${r.operador||''}</span></td>
       <td><span class="ps-td-clamp" title="${r.disposicion||''}">${r.disposicion||''}</span></td>
-      <td>${r.manifiesto ? `<span class="ps-td-1line" title="${r.manifiesto}">📎 ${r.manifiesto}</span>` : '<span style="color:#a0aec0;">—</span>'}</td>
+      <td><span class="ps-td-1line" title="${r.manifiesto||''}">${r.manifiesto || '—'}</span></td>
+      <td>
+        ${botonAdjuntos('residuos_manifiesto', r.id, 'residuos-manifiestos', _adjCacheManifiestos)}
+      </td>
+      <td>
+        ${botonAdjuntos('residuos_certificado', r.id, 'residuos-certificados', _adjCacheCertificados)}
+      </td>
       <td style="white-space:nowrap;">
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="editarResiduo('${r.id}')" title="Editar">✏️</button>
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="eliminarResiduo('${r.id}')" title="Eliminar">🗑️</button>
@@ -2973,17 +3085,26 @@ let _aguaEditId = null;
 let chartAguaInstance = null;
 let chartAguaActualInstance = null;
 
+let _adjCacheAgua = [];
 async function cargarAgua() {
   const tbody = document.getElementById('tbody-agua');
   tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando registros de consumo de agua...</td></tr>`;
   try {
-    const resp = await fetch(`${GA_TABLA_AGUA}?select=*&order=periodo.desc`, { headers: gaHeaders() });
+    const [resp, adj] = await Promise.all([
+      fetch(`${GA_TABLA_AGUA}?select=*&order=periodo.desc`, { headers: gaHeaders() }),
+      cargarAdjuntosDeTipo('agua_consumo'),
+    ]);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     agua = await resp.json();
+    _adjCacheAgua = adj;
     renderAgua();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
   }
+}
+async function refrescarAdjuntos_agua_consumo() {
+  _adjCacheAgua = await cargarAdjuntosDeTipo('agua_consumo');
+  renderAgua();
 }
 
 function poblarFiltroBaseAgua() {
@@ -3040,11 +3161,7 @@ function renderAgua() {
       <td>${formatPeriodo(a.periodo)}</td>
       <td><span class="ps-td-clamp" title="${a.observaciones||''}">${a.observaciones || '—'}</span></td>
       <td>
-        ${a.comprobante_url ? `
-          <a href="${a.comprobante_url}" target="_blank" title="Ver: ${a.comprobante_nombre}" style="font-size:16px;text-decoration:none;color:#3182ce;">👁️</a>
-        ` : `
-          <label class="ps-file-btn" style="margin-bottom:0;">📎 Adjuntar<input type="file" onchange="adjuntarComprobanteAgua('${a.id}', this)"></label>
-        `}
+        ${botonAdjuntos('agua_consumo', a.id, 'agua', _adjCacheAgua)}
       </td>
       <td style="white-space:nowrap;">
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="editarAgua('${a.id}')" title="Editar">✏️</button>
@@ -3181,11 +3298,7 @@ async function guardarAgua() {
   };
 
   try {
-    if (archivo) {
-      datos.comprobante_url = await subirArchivoGA(archivo, 'agua');
-      datos.comprobante_nombre = archivo.name;
-    }
-
+    let registro;
     if (_aguaEditId) {
       const resp = await fetch(`${GA_TABLA_AGUA}?id=eq.${_aguaEditId}`, {
         method: 'PATCH',
@@ -3194,6 +3307,7 @@ async function guardarAgua() {
       });
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const [actualizado] = await resp.json();
+      registro = actualizado;
       const idx = agua.findIndex(x => x.id === _aguaEditId);
       if (idx !== -1) agua[idx] = actualizado;
     } else {
@@ -3204,8 +3318,21 @@ async function guardarAgua() {
       });
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const [nuevo] = await resp.json();
+      registro = nuevo;
       agua.push(nuevo);
     }
+
+    // Si se cargó un comprobante al crear/editar, lo sube como adjunto múltiple
+    if (archivo) {
+      const url = await subirArchivoGA(archivo, 'agua');
+      await fetch(GA_TABLA_ADJUNTOS, {
+        method: 'POST',
+        headers: gaHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ tabla: 'agua_consumo', registro_id: registro.id, nombre: archivo.name, url }),
+      });
+      _adjCacheAgua = await cargarAdjuntosDeTipo('agua_consumo');
+    }
+
     cerrarModalAgua();
     renderAgua();
   } catch (err) {
@@ -3213,24 +3340,7 @@ async function guardarAgua() {
   }
 }
 
-async function adjuntarComprobanteAgua(id, inputEl) {
-  const archivo = inputEl.files[0];
-  if (!archivo) return;
-  try {
-    const url = await subirArchivoGA(archivo, 'agua');
-    const resp = await fetch(`${GA_TABLA_AGUA}?id=eq.${id}`, {
-      method: 'PATCH',
-      headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
-      body: JSON.stringify({ comprobante_nombre: archivo.name, comprobante_url: url }),
-    });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const [actualizado] = await resp.json();
-    const idx = agua.findIndex(x => x.id === id);
-    if (idx !== -1) agua[idx] = actualizado;
-    renderAgua();
-  } catch (err) {
-    alert('No se pudo adjuntar el comprobante: ' + err.message);
-  }
+
 }
 
 async function eliminarAgua(id) {
