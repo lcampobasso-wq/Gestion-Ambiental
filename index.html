@@ -665,9 +665,14 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <div class="ps-content-card" style="margin-bottom:0;">
             <div class="ps-content-card-title">
               Comparar dos años
-              <div style="display:flex;gap:10px;">
-                <select class="ps-select" id="chart-anio-a" onchange="renderChartResiduos()" style="min-width:90px;"></select>
-                <select class="ps-select" id="chart-anio-b" onchange="renderChartResiduos()" style="min-width:90px;"></select>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <div id="toggle-modo-grafico-residuos" style="display:flex;border:1.5px solid var(--ps-border);border-radius:var(--ps-radius-md);overflow:hidden;">
+                  <button class="ps-view-toggle active" data-modo="total" onclick="cambiarModoGraficoResiduos('total')">Total kg</button>
+                  <button class="ps-view-toggle" data-modo="indice" onclick="cambiarModoGraficoResiduos('indice')">Índice kg/HHT</button>
+                </div>
+                <select class="ps-select" id="chart-anio-a" onchange="renderChartResiduos()" style="min-width:80px;"></select>
+                <select class="ps-select" id="chart-anio-b" onchange="renderChartResiduos()" style="min-width:80px;"></select>
+                <button class="ps-btn" style="padding:6px 10px;font-size:11px;" onclick="abrirModalHHT()">⚙️ HHT</button>
               </div>
             </div>
             <div style="height:160px;">
@@ -1066,6 +1071,34 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
     </div>
 
   </main>
+</div>
+
+<!-- MODAL: HHT MENSUAL -->
+<div class="ps-modal-overlay" id="modal-hht">
+  <div class="ps-modal">
+    <div class="ps-modal-header">
+      <div class="ps-modal-title">HHT mensual (toda la empresa)</div>
+      <button class="ps-modal-close" onclick="cerrarModalHHT()">✕</button>
+    </div>
+    <div class="ps-modal-body">
+      <div style="font-size:11px;color:var(--ps-muted);">Se usa para calcular el índice kg de residuos / HHT en el gráfico de comparación de años.</div>
+      <div class="ps-row-2">
+        <div class="ps-field">
+          <label>Período (mes)</label>
+          <input class="ps-input" type="month" id="hht-periodo">
+        </div>
+        <div class="ps-field">
+          <label>HHT trabajadas</label>
+          <input class="ps-input" type="number" id="hht-valor" placeholder="Ej: 5200">
+        </div>
+      </div>
+      <button class="ps-btn ps-btn-primary" style="align-self:flex-start;" onclick="guardarHHT()">+ Guardar / actualizar mes</button>
+      <div id="hht-lista" style="margin-top:10px;"></div>
+    </div>
+    <div class="ps-modal-footer">
+      <button class="ps-btn ps-btn-primary" onclick="cerrarModalHHT()">Listo</button>
+    </div>
+  </div>
 </div>
 
 <!-- MODAL: ADJUNTOS MÚLTIPLES (genérico, compartido en toda la app) -->
@@ -2610,6 +2643,103 @@ const badgeClaseTipoResiduo = t => t === 'Peligroso' ? 'ps-badge-danger' : t ===
 const mesesNombre = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
 let _adjCacheManifiestos = [], _adjCacheCertificados = [];
+const GA_TABLA_HHT = `${GA_SUPABASE_URL}/rest/v1/hht_mensual`;
+let hhtMensual = [];
+
+async function cargarHHT() {
+  try {
+    const resp = await fetch(`${GA_TABLA_HHT}?select=*&order=periodo.desc`, { headers: gaHeaders() });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    hhtMensual = await resp.json();
+  } catch (err) {
+    hhtMensual = [];
+  }
+}
+
+function abrirModalHHT() {
+  document.getElementById('modal-hht').classList.add('active');
+  renderListaHHT();
+}
+function cerrarModalHHT() {
+  document.getElementById('modal-hht').classList.remove('active');
+  document.getElementById('hht-periodo').value = '';
+  document.getElementById('hht-valor').value = '';
+}
+
+function renderListaHHT() {
+  const cont = document.getElementById('hht-lista');
+  const ordenados = [...hhtMensual].sort((a, b) => b.periodo.localeCompare(a.periodo));
+  cont.innerHTML = ordenados.length ? `
+    <div class="ps-table-wrap">
+      <table class="ps-table">
+        <thead><tr><th>Período</th><th>HHT</th><th style="width:50px;"></th></tr></thead>
+        <tbody>
+          ${ordenados.map(h => `
+            <tr>
+              <td>${formatPeriodo(h.periodo)}</td>
+              <td>${Number(h.hht).toLocaleString('es-AR')}</td>
+              <td><button class="ps-btn" style="padding:3px 7px;font-size:10px;" onclick="eliminarHHT('${h.id}')">🗑️</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  ` : '<div style="color:var(--ps-muted);font-size:12px;">Todavía no cargaste ningún mes</div>';
+}
+
+async function guardarHHT() {
+  const periodo = document.getElementById('hht-periodo').value;
+  const hht = parseFloat(document.getElementById('hht-valor').value);
+  if (!periodo || isNaN(hht)) {
+    alert('Completá el período y las HHT.');
+    return;
+  }
+  try {
+    const existente = hhtMensual.find(h => h.periodo === periodo);
+    let resp;
+    if (existente) {
+      resp = await fetch(`${GA_TABLA_HHT}?id=eq.${existente.id}`, {
+        method: 'PATCH',
+        headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+        body: JSON.stringify({ hht }),
+      });
+    } else {
+      resp = await fetch(GA_TABLA_HHT, {
+        method: 'POST',
+        headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+        body: JSON.stringify({ periodo, hht }),
+      });
+    }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const [actualizado] = await resp.json();
+    if (existente) {
+      Object.assign(existente, actualizado);
+    } else {
+      hhtMensual.push(actualizado);
+    }
+    document.getElementById('hht-periodo').value = '';
+    document.getElementById('hht-valor').value = '';
+    renderListaHHT();
+    renderChartResiduos();
+  } catch (err) {
+    alert('No se pudo guardar: ' + err.message);
+  }
+}
+
+async function eliminarHHT(id) {
+  if (!confirm('¿Eliminar las HHT de este mes?')) return;
+  try {
+    const resp = await fetch(`${GA_TABLA_HHT}?id=eq.${id}`, { method: 'DELETE', headers: gaHeaders() });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    hhtMensual = hhtMensual.filter(h => h.id !== id);
+    renderListaHHT();
+    renderChartResiduos();
+  } catch (err) {
+    alert('No se pudo eliminar: ' + err.message);
+  }
+}
+
+
 async function cargarResiduos() {
   const tbody = document.getElementById('tbody-residuos');
   tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando registros de residuos...</td></tr>`;
@@ -2618,6 +2748,7 @@ async function cargarResiduos() {
       fetch(`${GA_TABLA_RESIDUOS}?select=*&order=fecha.desc`, { headers: gaHeaders() }),
       cargarAdjuntosDeTipo('residuos_manifiesto'),
       cargarAdjuntosDeTipo('residuos_certificado'),
+      cargarHHT(),
     ]);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     residuos = await resp.json();
@@ -2763,13 +2894,32 @@ function totalesPorMes(anio) {
   return totales;
 }
 
+let modoGraficoResiduos = 'total';
+
+function cambiarModoGraficoResiduos(modo) {
+  modoGraficoResiduos = modo;
+  document.querySelectorAll('#toggle-modo-grafico-residuos .ps-view-toggle').forEach(b => b.classList.toggle('active', b.dataset.modo === modo));
+  renderChartResiduos();
+}
+
+function totalesPorMesIndice(anio) {
+  const kgPorMes = totalesPorMes(anio);
+  return kgPorMes.map((kg, i) => {
+    const periodo = `${anio}-${String(i + 1).padStart(2, '0')}`;
+    const hht = hhtMensual.find(h => h.periodo === periodo);
+    return (hht && hht.hht > 0) ? +(kg / hht.hht).toFixed(3) : null; // null = sin dato, deja el hueco en el gráfico
+  });
+}
+
 function renderChartResiduos() {
   const anioA = document.getElementById('chart-anio-a').value;
   const anioB = document.getElementById('chart-anio-b').value;
   if (!anioA || !anioB || typeof Chart === 'undefined') return;
 
-  const datosA = totalesPorMes(anioA);
-  const datosB = totalesPorMes(anioB);
+  const esIndice = modoGraficoResiduos === 'indice';
+  const datosA = esIndice ? totalesPorMesIndice(anioA) : totalesPorMes(anioA);
+  const datosB = esIndice ? totalesPorMesIndice(anioB) : totalesPorMes(anioB);
+  const etiquetaEje = esIndice ? 'kg / HHT' : 'kg generados';
 
   const ctx = document.getElementById('chart-residuos').getContext('2d');
   if (chartResiduosInstance) chartResiduosInstance.destroy();
@@ -2778,8 +2928,8 @@ function renderChartResiduos() {
     data: {
       labels: mesesNombre,
       datasets: [
-        { label: anioA, data: datosA, borderColor: '#e8a020', backgroundColor: 'transparent', borderWidth: 1.5, tension: 0.3, fill: false, pointRadius: 1.5, pointHoverRadius: 4 },
-        { label: anioB, data: datosB, borderColor: '#3182ce', backgroundColor: 'transparent', borderWidth: 1.5, tension: 0.3, fill: false, pointRadius: 1.5, pointHoverRadius: 4 },
+        { label: anioA, data: datosA, borderColor: '#e8a020', backgroundColor: 'transparent', borderWidth: 1.5, tension: 0.3, fill: false, pointRadius: 1.5, pointHoverRadius: 4, spanGaps: false },
+        { label: anioB, data: datosB, borderColor: '#3182ce', backgroundColor: 'transparent', borderWidth: 1.5, tension: 0.3, fill: false, pointRadius: 1.5, pointHoverRadius: 4, spanGaps: false },
       ]
     },
     options: {
@@ -2787,7 +2937,7 @@ function renderChartResiduos() {
       maintainAspectRatio: false,
       plugins: { legend: { position: 'top', align: 'end', labels: { font: { family: 'Segoe UI', size: 10.5 }, boxWidth: 16, boxHeight: 1, padding: 10 } } },
       scales: {
-        y: { beginAtZero: true, ticks: { font: { size: 9.5 } }, title: { display: true, text: 'kg generados', font: { size: 9.5 } }, grid: { color: '#f0f2f6' } },
+        y: { beginAtZero: true, ticks: { font: { size: 9.5 } }, title: { display: true, text: etiquetaEje, font: { size: 9.5 } }, grid: { color: '#f0f2f6' } },
         x: { ticks: { font: { size: 9.5 } }, grid: { display: false } }
       }
     }
