@@ -1351,7 +1351,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
       <div id="dn-info" class="ps-grid-2" style="font-size:13px;"></div>
 
       <div class="ps-field">
-        <label>Nota original</label>
+        <label>Nota original (puede tener varios archivos)</label>
         <div id="dn-archivo-original"></div>
       </div>
 
@@ -1365,21 +1365,17 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
 
       <div class="ps-content-card-title" style="border:none;padding:0;margin-bottom:10px;">Respuesta a la nota</div>
 
-      <div class="ps-row-2">
-        <div class="ps-field">
-          <label>Fecha de respuesta</label>
-          <input class="ps-input" type="date" id="dn-respuesta-fecha">
-        </div>
-        <div class="ps-field">
-          <label>PDF de respuesta (sellado por recepción del ente)</label>
-          <input class="ps-input" type="file" id="dn-respuesta-archivo" style="width:100%;padding:6px 10px;">
-        </div>
+      <div class="ps-field">
+        <label>Fecha de respuesta</label>
+        <input class="ps-input" type="date" id="dn-respuesta-fecha" onchange="guardarFechaRespuestaNota()">
       </div>
-      <div id="dn-respuesta-actual" style="font-size:12px;color:var(--ps-muted);margin-top:-6px;"></div>
+      <div class="ps-field">
+        <label>Archivos de respuesta (puede haber varios, ej: nota + comprobante de recepción)</label>
+        <div id="dn-respuesta-actual"></div>
+      </div>
     </div>
     <div class="ps-modal-footer">
-      <button class="ps-btn" onclick="cerrarModalDetalleNota()">Cerrar</button>
-      <button class="ps-btn ps-btn-primary" onclick="guardarRespuestaNota()">Guardar respuesta</button>
+      <button class="ps-btn ps-btn-primary" onclick="cerrarModalDetalleNota()">Cerrar</button>
     </div>
   </div>
 </div>
@@ -2447,12 +2443,6 @@ async function guardarNota() {
   const fechaLimite = calcularFechaLimiteNota(recepcion, plazoDias);
 
   try {
-    let archivoNombre = null, archivoUrl = null;
-    if (archivo) {
-      archivoUrl = await subirArchivoGA(archivo, 'notas');
-      archivoNombre = archivo.name;
-    }
-
     const resp = await fetch(GA_TABLA_NOTAS, {
       method: 'POST',
       headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
@@ -2463,13 +2453,20 @@ async function guardarNota() {
         recepcion,
         plazo_dias: parseInt(plazoDias, 10),
         fecha_limite: fechaLimite,
-        archivo_nombre: archivoNombre,
-        archivo_url: archivoUrl,
       }),
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const [nota] = await resp.json();
     notas.push(nota);
+
+    if (archivo) {
+      const url = await subirArchivoGA(archivo, 'notas');
+      await fetch(GA_TABLA_ADJUNTOS, {
+        method: 'POST',
+        headers: gaHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ tabla: 'notas_original', registro_id: nota.id, nombre: archivo.name, url }),
+      });
+    }
 
     for (const texto of _notaItemsTemp) {
       const respPA = await fetch(GA_TABLA_PLANES, {
@@ -3340,9 +3337,6 @@ async function guardarAgua() {
   }
 }
 
-
-}
-
 async function eliminarAgua(id) {
   if (!confirm('¿Eliminar este registro de consumo de agua? Esta acción no se puede deshacer.')) return;
   try {
@@ -3361,16 +3355,25 @@ cargarAgua();
 const GA_TABLA_PLANES = `${GA_SUPABASE_URL}/rest/v1/planes_accion`;
 let planesAccion = [];
 
+let _adjCachePlanes = [];
 async function cargarPlanesAccion() {
   try {
-    const resp = await fetch(`${GA_TABLA_PLANES}?select=*&order=created_at.desc`, { headers: gaHeaders() });
+    const [resp, adj] = await Promise.all([
+      fetch(`${GA_TABLA_PLANES}?select=*&order=created_at.desc`, { headers: gaHeaders() }),
+      cargarAdjuntosDeTipo('planes_accion'),
+    ]);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     planesAccion = await resp.json();
+    _adjCachePlanes = adj;
     renderPlanesAccion();
   } catch (err) {
     const tbody = document.getElementById('tbody-planes-accion');
     if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
   }
+}
+async function refrescarAdjuntos_planes_accion() {
+  _adjCachePlanes = await cargarAdjuntosDeTipo('planes_accion');
+  renderPlanesAccion();
 }
 
 /* ══════════════ AUDITORÍAS E INSPECCIONES (conectado a Supabase) ══════════════ */
@@ -3627,12 +3630,7 @@ function renderPlanesAccion() {
       </td>
       <td><span class="ps-badge ${badgeClaseEstadoPA(p.estado)}">${p.estado}</span></td>
       <td>
-        ${p.evidencia_url ? `
-          <a href="${p.evidencia_url}" target="_blank" title="Ver: ${p.evidencia_nombre}" style="font-size:16px;text-decoration:none;color:#3182ce;">👁️</a>
-          <label class="ps-file-btn" style="margin-bottom:0;display:inline-flex;padding:3px 7px;font-size:10px;margin-left:4px;">Cambiar<input type="file" onchange="adjuntarEvidenciaPA('${p.id}', this)"></label>
-        ` : `
-          <label class="ps-file-btn">📎 Adjuntar<input type="file" onchange="adjuntarEvidenciaPA('${p.id}', this)"></label>
-        `}
+        ${botonAdjuntos('planes_accion', p.id, 'planes-accion', _adjCachePlanes)}
       </td>
       <td style="white-space:nowrap;">
         ${p.estado !== 'Cumplido' ? `<button class="ps-btn ps-btn-accent" style="padding:5px 10px;font-size:11.5px;" onclick="marcarCumplidoPA('${p.id}')">✓ Marcar cumplido</button>` : '<span style="color:#276749;font-size:12px;font-weight:600;">✓ Cumplido</span>'}
@@ -3757,28 +3755,6 @@ async function actualizarPlazoPA(id, valor) {
     renderPlanesAccion();
   } catch (err) {
     alert('No se pudo guardar el plazo: ' + err.message);
-  }
-}
-
-// Adjunta un archivo de evidencia a un plan puntual
-async function adjuntarEvidenciaPA(id, inputEl) {
-  const plan = planesAccion.find(p => p.id === id);
-  if (!plan) return;
-  const archivo = inputEl.files[0];
-  if (!archivo) return;
-  try {
-    const url = await subirArchivoGA(archivo, 'planes-accion');
-    const resp = await fetch(`${GA_TABLA_PLANES}?id=eq.${id}`, {
-      method: 'PATCH',
-      headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
-      body: JSON.stringify({ evidencia_nombre: archivo.name, evidencia_url: url }),
-    });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const [actualizado] = await resp.json();
-    Object.assign(plan, actualizado);
-    renderPlanesAccion();
-  } catch (err) {
-    alert('No se pudo adjuntar el archivo: ' + err.message);
   }
 }
 
@@ -3947,15 +3923,12 @@ function abrirDetalleNota(notaId) {
     <div><strong>Estado:</strong> <span class="ps-badge ${badgeClaseEstadoNota(estado)}">${estado}</span></div>
   `;
 
-  document.getElementById('dn-archivo-original').innerHTML = linkArchivo(nota.archivo_url, nota.archivo_nombre);
+  renderAdjuntosNotaInline('dn-archivo-original', 'notas_original', nota.id);
   document.getElementById('dn-items-resumen').innerHTML = `<strong>${cumplidos}/${items.length}</strong> ítems cumplidos`;
   document.getElementById('dn-btn-ver-items').onclick = () => { cerrarModalDetalleNota(); verItemsNota(nota.id); };
 
   document.getElementById('dn-respuesta-fecha').value = nota.respuesta_fecha || '';
-  document.getElementById('dn-respuesta-archivo').value = '';
-  document.getElementById('dn-respuesta-actual').innerHTML = nota.respuesta_archivo_url
-    ? `Archivo actual: ${linkArchivo(nota.respuesta_archivo_url, nota.respuesta_archivo_nombre)}`
-    : 'Todavía no se cargó el PDF de respuesta.';
+  renderAdjuntosNotaInline('dn-respuesta-actual', 'notas_respuesta', nota.id);
 
   document.getElementById('modal-detalle-nota').classList.add('active');
 }
@@ -3965,32 +3938,77 @@ function cerrarModalDetalleNota() {
   _notaDetalleActualId = null;
 }
 
-async function guardarRespuestaNota() {
+// Lista de adjuntos inline (sin abrir otro modal encima) usada dentro del Detalle de Nota
+async function renderAdjuntosNotaInline(containerId, tabla, notaId) {
+  const cont = document.getElementById(containerId);
+  cont.innerHTML = '<div style="color:var(--ps-muted);font-size:12px;">Cargando...</div>';
+  const carpeta = tabla === 'notas_original' ? 'notas' : 'notas-respuestas';
+  try {
+    const resp = await fetch(`${GA_TABLA_ADJUNTOS}?select=*&tabla=eq.${tabla}&registro_id=eq.${notaId}&order=uploaded_at.asc`, { headers: gaHeaders() });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const lista = await resp.json();
+    const chips = lista.length ? lista.map(a => `
+      <div class="ps-item-chip">
+        <a href="${a.url}" target="_blank" class="ps-item-chip-text" style="color:#3182ce;text-decoration:none;">📄 ${a.nombre}</a>
+        <button class="ps-item-chip-remove" onclick="eliminarAdjuntoNotaInline('${a.id}','${containerId}','${tabla}','${notaId}')" title="Eliminar">✕</button>
+      </div>
+    `).join('') : '<div style="color:var(--ps-muted);font-size:12px;margin-bottom:6px;">Sin archivos todavía</div>';
+    cont.innerHTML = chips + `
+      <label class="ps-file-btn" style="margin-top:6px;margin-bottom:0;">
+        + Agregar archivo
+        <input type="file" onchange="agregarAdjuntoNotaInline(this,'${tabla}','${notaId}','${containerId}')">
+      </label>`;
+  } catch (err) {
+    cont.innerHTML = `<div style="color:#9b2c2c;font-size:12px;">No se pudo cargar (${err.message})</div>`;
+  }
+}
+
+async function agregarAdjuntoNotaInline(inputEl, tabla, notaId, containerId) {
+  const archivo = inputEl.files[0];
+  if (!archivo) return;
+  const carpeta = tabla === 'notas_original' ? 'notas' : 'notas-respuestas';
+  try {
+    const url = await subirArchivoGA(archivo, carpeta);
+    const resp = await fetch(GA_TABLA_ADJUNTOS, {
+      method: 'POST',
+      headers: gaHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ tabla, registro_id: notaId, nombre: archivo.name, url }),
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    renderAdjuntosNotaInline(containerId, tabla, notaId);
+  } catch (err) {
+    alert('No se pudo subir el archivo: ' + err.message);
+  }
+}
+
+async function eliminarAdjuntoNotaInline(id, containerId, tabla, notaId) {
+  if (!confirm('¿Eliminar este archivo adjunto? Esta acción no se puede deshacer.')) return;
+  try {
+    const resp = await fetch(`${GA_TABLA_ADJUNTOS}?id=eq.${id}`, { method: 'DELETE', headers: gaHeaders() });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    renderAdjuntosNotaInline(containerId, tabla, notaId);
+  } catch (err) {
+    alert('No se pudo eliminar: ' + err.message);
+  }
+}
+
+// Guarda solo la fecha de respuesta (los archivos se agregan/quitan solos desde la lista de arriba)
+async function guardarFechaRespuestaNota() {
   const nota = notas.find(n => n.id === _notaDetalleActualId);
   if (!nota) return;
-
   const fecha = document.getElementById('dn-respuesta-fecha').value;
-  const archivo = document.getElementById('dn-respuesta-archivo').files[0];
-  const datos = { respuesta_fecha: fecha || null };
-
   try {
-    if (archivo) {
-      datos.respuesta_archivo_url = await subirArchivoGA(archivo, 'notas-respuestas');
-      datos.respuesta_archivo_nombre = archivo.name;
-    }
     const resp = await fetch(`${GA_TABLA_NOTAS}?id=eq.${nota.id}`, {
       method: 'PATCH',
       headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
-      body: JSON.stringify(datos),
+      body: JSON.stringify({ respuesta_fecha: fecha || null }),
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const [actualizada] = await resp.json();
     Object.assign(nota, actualizada);
-
     renderNotas();
-    abrirDetalleNota(nota.id); // refresca la vista del modal con lo recién guardado
   } catch (err) {
-    alert('No se pudo guardar la respuesta: ' + err.message);
+    alert('No se pudo guardar la fecha: ' + err.message);
   }
 }
 
