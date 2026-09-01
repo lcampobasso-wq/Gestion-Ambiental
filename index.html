@@ -798,6 +798,13 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
     <!-- MONITOREOS -->
     <div class="ps-view" id="view-monitoreos">
 
+      <div id="toggle-subvista-monitoreos" style="display:flex;border:1.5px solid var(--ps-border);border-radius:var(--ps-radius-md);overflow:hidden;width:fit-content;margin-bottom:16px;">
+        <button class="ps-view-toggle active" data-subvista="mediciones" onclick="cambiarSubvistaMonitoreos('mediciones')">Mediciones</button>
+        <button class="ps-view-toggle" data-subvista="programa" onclick="cambiarSubvistaMonitoreos('programa')">Programa Anual</button>
+      </div>
+
+      <div id="subvista-monitoreos-mediciones">
+
       <div class="ps-mini-kpi-row" id="mon-kpis"></div>
 
       <div class="ps-content-card">
@@ -860,6 +867,60 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <div>Probá cambiar los filtros o cargar una nueva medición</div>
         </div>
       </div>
+
+      </div>
+      <!-- fin subvista-monitoreos-mediciones -->
+
+      <div id="subvista-monitoreos-programa" style="display:none;">
+
+      <div class="ps-mini-kpi-row" id="prog-kpis"></div>
+
+      <div class="ps-content-card">
+        <div class="ps-content-card-title">
+          Programa Anual de Monitoreos
+          <div style="display:flex;gap:10px;">
+            <select class="ps-select" id="filtro-anio-programa" onchange="renderProgramaMonitoreo()" style="min-width:90px;"></select>
+            <button class="ps-btn ps-btn-primary" onclick="abrirModalProgramaItem()">+ Nuevo ítem</button>
+          </div>
+        </div>
+        <p style="margin-bottom:14px;color:var(--ps-muted);font-size:12.5px;">Hacé click en el mes correspondiente para ver qué tarea aplica, marcarla como cumplida y adjuntar el informe.</p>
+
+        <div class="ps-table-wrap">
+          <table class="ps-table" style="min-width:1200px;">
+            <thead>
+              <tr>
+                <th style="width:120px;">Tema</th>
+                <th style="width:140px;">Ubicación</th>
+                <th style="width:90px;">Medida</th>
+                <th style="width:60px;">Ene</th>
+                <th style="width:60px;">Feb</th>
+                <th style="width:60px;">Mar</th>
+                <th style="width:60px;">Abr</th>
+                <th style="width:60px;">May</th>
+                <th style="width:60px;">Jun</th>
+                <th style="width:60px;">Jul</th>
+                <th style="width:60px;">Ago</th>
+                <th style="width:60px;">Sep</th>
+                <th style="width:60px;">Oct</th>
+                <th style="width:60px;">Nov</th>
+                <th style="width:60px;">Dic</th>
+                <th style="width:90px;">% Cumpl.</th>
+                <th style="width:70px;"></th>
+              </tr>
+            </thead>
+            <tbody id="tbody-programa-monitoreo"></tbody>
+          </table>
+        </div>
+        <div class="ps-empty" id="prog-empty" style="display:none;">
+          <div class="ps-empty-icon">📅</div>
+          <div class="ps-empty-title">No hay ítems de programa cargados</div>
+          <div>Cargá el primer ítem del cronograma con "+ Nuevo ítem"</div>
+        </div>
+      </div>
+
+      </div>
+      <!-- fin subvista-monitoreos-programa -->
+
     </div>
 
     <!-- CONSUMO DE AGUA -->
@@ -1616,6 +1677,91 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
     <div class="ps-modal-footer">
       <button class="ps-btn" onclick="cerrarModalResiduo()">Cancelar</button>
       <button class="ps-btn ps-btn-primary" onclick="guardarResiduo()">Guardar registro</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: NUEVO ÍTEM DEL PROGRAMA -->
+<div class="ps-modal-overlay" id="modal-programa-item">
+  <div class="ps-modal">
+    <div class="ps-modal-header">
+      <div class="ps-modal-title">Nuevo ítem del programa</div>
+      <button class="ps-modal-close" onclick="cerrarModalProgramaItem()">✕</button>
+    </div>
+    <div class="ps-modal-body">
+      <div class="ps-row-2">
+        <div class="ps-field">
+          <label>Año</label>
+          <input class="ps-input" type="number" id="pg-anio" placeholder="Ej: 2026">
+        </div>
+        <div class="ps-field">
+          <label>Tema</label>
+          <input class="ps-input" id="pg-tema" placeholder="Ej: AGUA">
+        </div>
+      </div>
+      <div class="ps-field">
+        <label>Acción a tomar</label>
+        <input class="ps-input" id="pg-accion" placeholder="Ej: Realizar análisis físico-químico-microbiológico" style="width:100%;">
+      </div>
+      <div class="ps-row-2">
+        <div class="ps-field">
+          <label>Ubicación / Base</label>
+          <input class="ps-input" id="pg-base" placeholder="Ej: Cerro Dragón">
+        </div>
+        <div class="ps-field">
+          <label>Medida</label>
+          <select class="ps-select" id="pg-medida">
+            <option>Preventiva</option>
+            <option>Control</option>
+          </select>
+        </div>
+      </div>
+      <div class="ps-field">
+        <label>Responsable</label>
+        <input class="ps-input" id="pg-responsable" placeholder="Ej: Responsable MA" style="width:100%;">
+      </div>
+      <div style="font-size:11px;color:var(--ps-muted);">Se crean los 12 meses vacíos automáticamente. Después hacés click en cada mes de la tabla para definir qué corresponde (si aplica).</div>
+    </div>
+    <div class="ps-modal-footer">
+      <button class="ps-btn" onclick="cerrarModalProgramaItem()">Cancelar</button>
+      <button class="ps-btn ps-btn-primary" onclick="guardarProgramaItem()">Guardar ítem</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: DETALLE DE MES DEL PROGRAMA -->
+<div class="ps-modal-overlay" id="modal-programa-mes">
+  <div class="ps-modal">
+    <div class="ps-modal-header">
+      <div class="ps-modal-title" id="pm-titulo">Detalle del mes</div>
+      <button class="ps-modal-close" onclick="cerrarModalProgramaMes()">✕</button>
+    </div>
+    <div class="ps-modal-body">
+      <div class="ps-field">
+        <label>¿Qué corresponde hacer este mes? (vacío = no aplica)</label>
+        <textarea class="ps-input" id="pm-descripcion" placeholder="Ej: Análisis microbiológico"></textarea>
+      </div>
+      <div class="ps-row-2">
+        <div class="ps-field">
+          <label>¿Está cumplido?</label>
+          <select class="ps-select" id="pm-cumplido">
+            <option value="false">No</option>
+            <option value="true">Sí</option>
+          </select>
+        </div>
+        <div class="ps-field">
+          <label>Fecha de cumplimiento</label>
+          <input class="ps-input" type="date" id="pm-fecha-cumplido">
+        </div>
+      </div>
+      <div class="ps-field">
+        <label>Informes adjuntos</label>
+        <div id="pm-adjuntos"></div>
+      </div>
+    </div>
+    <div class="ps-modal-footer">
+      <button class="ps-btn" onclick="cerrarModalProgramaMes()">Cancelar</button>
+      <button class="ps-btn ps-btn-primary" onclick="guardarProgramaMes()">Guardar</button>
     </div>
   </div>
 </div>
@@ -3527,6 +3673,284 @@ async function eliminarMonitoreo(id) {
 }
 
 cargarMonitoreos();
+
+/* ══════════════ PROGRAMA ANUAL DE MONITOREOS ══════════════ */
+const GA_TABLA_PROGRAMA = `${GA_SUPABASE_URL}/rest/v1/programa_monitoreo`;
+const GA_TABLA_PROGRAMA_MES = `${GA_SUPABASE_URL}/rest/v1/programa_monitoreo_mes`;
+let programaMonitoreo = [];
+let programaMonitoreoMes = [];
+let _programaMesActualId = null;
+
+function cambiarSubvistaMonitoreos(subvista) {
+  document.querySelectorAll('#toggle-subvista-monitoreos .ps-view-toggle').forEach(b => b.classList.toggle('active', b.dataset.subvista === subvista));
+  document.getElementById('subvista-monitoreos-mediciones').style.display = subvista === 'mediciones' ? 'block' : 'none';
+  document.getElementById('subvista-monitoreos-programa').style.display = subvista === 'programa' ? 'block' : 'none';
+  if (subvista === 'programa' && !programaMonitoreo.length) cargarProgramaMonitoreo();
+}
+
+async function cargarProgramaMonitoreo() {
+  const tbody = document.getElementById('tbody-programa-monitoreo');
+  tbody.innerHTML = `<tr><td colspan="17" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando programa...</td></tr>`;
+  try {
+    const [respItems, respMeses] = await Promise.all([
+      fetch(`${GA_TABLA_PROGRAMA}?select=*&order=tema.asc`, { headers: gaHeaders() }),
+      fetch(`${GA_TABLA_PROGRAMA_MES}?select=*&order=mes.asc`, { headers: gaHeaders() }),
+    ]);
+    if (!respItems.ok || !respMeses.ok) throw new Error('HTTP ' + respItems.status);
+    programaMonitoreo = await respItems.json();
+    programaMonitoreoMes = await respMeses.json();
+    renderProgramaMonitoreo();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="17" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
+  }
+}
+
+function poblarFiltroAnioPrograma() {
+  const sel = document.getElementById('filtro-anio-programa');
+  const actual = sel.value;
+  const anios = [...new Set(programaMonitoreo.map(p => String(p.anio)))].sort().reverse();
+  sel.innerHTML = anios.map(a => `<option ${a === actual ? 'selected' : ''}>${a}</option>`).join('') || `<option>${hoy().getFullYear()}</option>`;
+}
+
+function renderProgramaMonitoreo() {
+  poblarFiltroAnioPrograma();
+  const anioFiltro = document.getElementById('filtro-anio-programa').value;
+  const items = programaMonitoreo.filter(p => String(p.anio) === anioFiltro).sort((a,b) => (a.tema||'').localeCompare(b.tema||'') || (a.base||'').localeCompare(b.base||''));
+
+  const tbody = document.getElementById('tbody-programa-monitoreo');
+  const empty = document.getElementById('prog-empty');
+
+  tbody.innerHTML = items.map(p => {
+    const meses = programaMonitoreoMes.filter(m => m.programa_id === p.id).sort((a,b) => a.mes - b.mes);
+    const programados = meses.filter(m => m.descripcion && m.descripcion.trim());
+    const cumplidos = programados.filter(m => m.cumplido);
+    const pct = programados.length ? Math.round((cumplidos.length / programados.length) * 100) : null;
+
+    const celdasMeses = [];
+    for (let mesNum = 1; mesNum <= 12; mesNum++) {
+      const m = meses.find(x => x.mes === mesNum);
+      if (!m || !m.descripcion || !m.descripcion.trim()) {
+        celdasMeses.push(`<td style="text-align:center;"><button class="ps-btn" style="padding:2px 6px;font-size:11px;color:#cbd5e0;border-style:dashed;" onclick="abrirModalProgramaMes('${m ? m.id : ''}','${p.id}',${mesNum})" title="No aplica — click para definir">—</button></td>`);
+      } else if (m.cumplido) {
+        celdasMeses.push(`<td style="text-align:center;"><button class="ps-btn ps-btn-ok" style="padding:2px 6px;font-size:13px;background:#c6f6d5;border-color:#9ae6b4;" onclick="abrirModalProgramaMes('${m.id}','${p.id}',${mesNum})" title="${m.descripcion.replace(/"/g,'')}">✅</button></td>`);
+      } else {
+        celdasMeses.push(`<td style="text-align:center;"><button class="ps-btn" style="padding:2px 6px;font-size:13px;background:#fef3c7;border-color:#f6e05e;" onclick="abrirModalProgramaMes('${m.id}','${p.id}',${mesNum})" title="${m.descripcion.replace(/"/g,'')}">⏳</button></td>`);
+      }
+    }
+
+    return `
+    <tr>
+      <td><span class="ps-td-clamp" title="${p.tema||''}"><strong>${p.tema||'—'}</strong></span></td>
+      <td><span class="ps-td-clamp" title="${p.base||''}">${p.base||'—'}</span></td>
+      <td><span class="ps-badge-juris">${p.medida||'—'}</span></td>
+      ${celdasMeses.join('')}
+      <td style="text-align:center;">${pct === null ? '<span style="color:var(--ps-muted);">—</span>' : `<strong style="color:${pct===100?'#276749':pct>0?'#92400e':'#9b2c2c'};">${pct}%</strong>`}</td>
+      <td style="white-space:nowrap;"><button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="eliminarProgramaItem('${p.id}')" title="Eliminar ítem">🗑️</button></td>
+    </tr>`;
+  }).join('');
+
+  tbody.closest('.ps-table-wrap').style.display = items.length ? '' : 'none';
+  empty.style.display = items.length ? 'none' : 'block';
+
+  renderKpisPrograma(items);
+}
+
+function renderKpisPrograma(items) {
+  let totalProgramados = 0, totalCumplidos = 0;
+  items.forEach(p => {
+    const meses = programaMonitoreoMes.filter(m => m.programa_id === p.id && m.descripcion && m.descripcion.trim());
+    totalProgramados += meses.length;
+    totalCumplidos += meses.filter(m => m.cumplido).length;
+  });
+  const pctGeneral = totalProgramados ? Math.round((totalCumplidos / totalProgramados) * 100) : 0;
+
+  document.getElementById('prog-kpis').innerHTML = `
+    <div class="ps-mini-kpi"><div class="ps-mini-kpi-value" style="color:var(--ps-text);">${items.length}</div><div class="ps-mini-kpi-label">Ítems del programa</div></div>
+    <div class="ps-mini-kpi"><div class="ps-mini-kpi-value" style="color:var(--ps-text);">${totalProgramados}</div><div class="ps-mini-kpi-label">Tareas programadas</div></div>
+    <div class="ps-mini-kpi"><div class="ps-mini-kpi-value" style="color:#276749;">${totalCumplidos}</div><div class="ps-mini-kpi-label">Cumplidas</div></div>
+    <div class="ps-mini-kpi"><div class="ps-mini-kpi-value" style="color:${pctGeneral===100?'#276749':'#92400e'};">${pctGeneral}%</div><div class="ps-mini-kpi-label">% Cumplimiento general</div></div>
+  `;
+}
+
+function abrirModalProgramaItem() {
+  document.getElementById('pg-anio').value = hoy().getFullYear();
+  document.getElementById('modal-programa-item').classList.add('active');
+}
+function cerrarModalProgramaItem() {
+  document.getElementById('modal-programa-item').classList.remove('active');
+  ['pg-anio','pg-tema','pg-accion','pg-base','pg-responsable'].forEach(id => document.getElementById(id).value = '');
+}
+async function guardarProgramaItem() {
+  const anio = parseInt(document.getElementById('pg-anio').value, 10);
+  const tema = document.getElementById('pg-tema').value.trim();
+  const base = document.getElementById('pg-base').value.trim();
+  if (!anio || !tema || !base) {
+    alert('Completá al menos Año, Tema y Ubicación.');
+    return;
+  }
+  const datos = {
+    anio,
+    tema,
+    accion: document.getElementById('pg-accion').value.trim() || null,
+    base,
+    medida: document.getElementById('pg-medida').value,
+    responsable: document.getElementById('pg-responsable').value.trim() || null,
+  };
+  try {
+    const resp = await fetch(GA_TABLA_PROGRAMA, {
+      method: 'POST',
+      headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+      body: JSON.stringify(datos),
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const [nuevo] = await resp.json();
+    programaMonitoreo.push(nuevo);
+
+    // Crea los 12 meses vacíos
+    const mesesData = Array.from({ length: 12 }, (_, i) => ({ programa_id: nuevo.id, mes: i + 1 }));
+    const respMeses = await fetch(GA_TABLA_PROGRAMA_MES, {
+      method: 'POST',
+      headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+      body: JSON.stringify(mesesData),
+    });
+    if (respMeses.ok) {
+      const nuevosMeses = await respMeses.json();
+      programaMonitoreoMes.push(...nuevosMeses);
+    }
+
+    cerrarModalProgramaItem();
+    renderProgramaMonitoreo();
+  } catch (err) {
+    alert('No se pudo guardar: ' + err.message);
+  }
+}
+
+async function eliminarProgramaItem(id) {
+  if (!confirm('¿Eliminar este ítem del programa y todos sus meses? Esta acción no se puede deshacer.')) return;
+  try {
+    const resp = await fetch(`${GA_TABLA_PROGRAMA}?id=eq.${id}`, { method: 'DELETE', headers: gaHeaders() });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    programaMonitoreo = programaMonitoreo.filter(p => p.id !== id);
+    programaMonitoreoMes = programaMonitoreoMes.filter(m => m.programa_id !== id); // se borran solos en la base (cascade)
+    renderProgramaMonitoreo();
+  } catch (err) {
+    alert('No se pudo eliminar: ' + err.message);
+  }
+}
+
+async function abrirModalProgramaMes(mesId, programaId, mesNum) {
+  // Si el mes no existe todavía como fila (caso raro), lo crea primero
+  if (!mesId) {
+    try {
+      const resp = await fetch(GA_TABLA_PROGRAMA_MES, {
+        method: 'POST',
+        headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+        body: JSON.stringify({ programa_id: programaId, mes: mesNum }),
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const [nuevo] = await resp.json();
+      programaMonitoreoMes.push(nuevo);
+      mesId = nuevo.id;
+    } catch (err) {
+      alert('No se pudo preparar el mes: ' + err.message);
+      return;
+    }
+  }
+
+  const m = programaMonitoreoMes.find(x => x.id === mesId);
+  const p = programaMonitoreo.find(x => x.id === programaId);
+  if (!m || !p) return;
+  _programaMesActualId = mesId;
+
+  const nombresMesesLargosLocal = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  document.getElementById('pm-titulo').textContent = `${p.tema||''} — ${p.base||''} — ${nombresMesesLargosLocal[mesNum-1]}`;
+  document.getElementById('pm-descripcion').value = m.descripcion || '';
+  document.getElementById('pm-cumplido').value = m.cumplido ? 'true' : 'false';
+  document.getElementById('pm-fecha-cumplido').value = m.fecha_cumplido || '';
+
+  renderAdjuntosProgramaMesInline(mesId);
+  document.getElementById('modal-programa-mes').classList.add('active');
+}
+
+function cerrarModalProgramaMes() {
+  document.getElementById('modal-programa-mes').classList.remove('active');
+  _programaMesActualId = null;
+}
+
+async function guardarProgramaMes() {
+  if (!_programaMesActualId) return;
+  const descripcion = document.getElementById('pm-descripcion').value.trim() || null;
+  const cumplido = document.getElementById('pm-cumplido').value === 'true';
+  const fechaCumplido = document.getElementById('pm-fecha-cumplido').value || null;
+  try {
+    const resp = await fetch(`${GA_TABLA_PROGRAMA_MES}?id=eq.${_programaMesActualId}`, {
+      method: 'PATCH',
+      headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+      body: JSON.stringify({ descripcion, cumplido, fecha_cumplido: fechaCumplido }),
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const [actualizado] = await resp.json();
+    const idx = programaMonitoreoMes.findIndex(m => m.id === _programaMesActualId);
+    if (idx !== -1) programaMonitoreoMes[idx] = actualizado;
+    cerrarModalProgramaMes();
+    renderProgramaMonitoreo();
+  } catch (err) {
+    alert('No se pudo guardar: ' + err.message);
+  }
+}
+
+// Lista de informes adjuntos inline dentro del modal de detalle de mes
+async function renderAdjuntosProgramaMesInline(mesId) {
+  const cont = document.getElementById('pm-adjuntos');
+  cont.innerHTML = '<div style="color:var(--ps-muted);font-size:12px;">Cargando...</div>';
+  try {
+    const resp = await fetch(`${GA_TABLA_ADJUNTOS}?select=*&tabla=eq.programa_monitoreo_mes&registro_id=eq.${mesId}&order=uploaded_at.asc`, { headers: gaHeaders() });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const lista = await resp.json();
+    const chips = lista.length ? lista.map(a => `
+      <div class="ps-item-chip">
+        <a href="${a.url}" target="_blank" class="ps-item-chip-text" style="color:#3182ce;text-decoration:none;">📄 ${a.nombre}</a>
+        <button class="ps-item-chip-remove" onclick="eliminarAdjuntoProgramaMesInline('${a.id}','${mesId}')" title="Eliminar">✕</button>
+      </div>
+    `).join('') : '<div style="color:var(--ps-muted);font-size:12px;margin-bottom:6px;">Sin informes todavía</div>';
+    cont.innerHTML = chips + `
+      <label class="ps-file-btn" style="margin-top:6px;margin-bottom:0;">
+        + Agregar informe
+        <input type="file" onchange="agregarAdjuntoProgramaMesInline(this,'${mesId}')">
+      </label>`;
+  } catch (err) {
+    cont.innerHTML = `<div style="color:#9b2c2c;font-size:12px;">No se pudo cargar (${err.message})</div>`;
+  }
+}
+
+async function agregarAdjuntoProgramaMesInline(inputEl, mesId) {
+  const archivo = inputEl.files[0];
+  if (!archivo) return;
+  try {
+    const url = await subirArchivoGA(archivo, 'programa-monitoreo');
+    const resp = await fetch(GA_TABLA_ADJUNTOS, {
+      method: 'POST',
+      headers: gaHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ tabla: 'programa_monitoreo_mes', registro_id: mesId, nombre: archivo.name, url }),
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    renderAdjuntosProgramaMesInline(mesId);
+  } catch (err) {
+    alert('No se pudo subir el informe: ' + err.message);
+  }
+}
+
+async function eliminarAdjuntoProgramaMesInline(id, mesId) {
+  if (!confirm('¿Eliminar este informe adjunto? Esta acción no se puede deshacer.')) return;
+  try {
+    const resp = await fetch(`${GA_TABLA_ADJUNTOS}?id=eq.${id}`, { method: 'DELETE', headers: gaHeaders() });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    renderAdjuntosProgramaMesInline(mesId);
+  } catch (err) {
+    alert('No se pudo eliminar: ' + err.message);
+  }
+}
+
 
 /* ══════════════ CONSUMO DE AGUA (conectado a Supabase) ══════════════ */
 const GA_TABLA_AGUA = `${GA_SUPABASE_URL}/rest/v1/agua_consumo`;
