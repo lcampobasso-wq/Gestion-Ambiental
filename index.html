@@ -324,6 +324,12 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <div class="ps-card-value" id="dash-monitoreos-value">—</div>
           <div class="ps-card-sub">Cargados este mes</div>
         </div>
+        <div class="ps-card">
+          <div class="ps-card-icon ps-icon-red">📋</div>
+          <div class="ps-card-label">Manifiestos pendientes</div>
+          <div class="ps-card-value" id="dash-manifiestos-value">—</div>
+          <div class="ps-card-sub">Residuos peligrosos, reclamar certificado</div>
+        </div>
       </div>
 
       <div class="ps-grid-2">
@@ -335,6 +341,14 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <div class="ps-content-card-title">Seguimiento de planes de acción</div>
           <div id="dash-planes-accion"></div>
         </div>
+      </div>
+
+      <div class="ps-content-card">
+        <div class="ps-content-card-title">
+          Manifiestos de Residuos Peligrosos pendientes <span style="font-weight:400;font-size:11px;color:var(--ps-muted);">(reclamar certificado de disposición final)</span>
+          <button class="ps-btn" style="padding:6px 10px;font-size:11px;" onclick="irAManifiestosPendientes()">Ver todos →</button>
+        </div>
+        <div id="dash-manifiestos-pendientes"></div>
       </div>
     </div>
 
@@ -565,6 +579,13 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
     <!-- RESIDUOS -->
     <div class="ps-view" id="view-residuos">
 
+      <div id="toggle-subvista-residuos" style="display:flex;border:1.5px solid var(--ps-border);border-radius:var(--ps-radius-md);overflow:hidden;width:fit-content;margin-bottom:16px;">
+        <button class="ps-view-toggle active" data-subvista="general" onclick="cambiarSubvistaResiduos('general')">Vista General</button>
+        <button class="ps-view-toggle" data-subvista="manifiestos" onclick="cambiarSubvistaResiduos('manifiestos')">Control de Manifiestos (Peligrosos)</button>
+      </div>
+
+      <div id="subvista-residuos-general">
+
       <div class="ps-mini-kpi-row" id="res-kpis"></div>
 
       <div class="ps-content-card">
@@ -576,7 +597,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
         <div class="ps-filters" style="align-items:center;">
           <div class="ps-field">
             <label>Vista</label>
-            <div style="display:flex;border:1.5px solid var(--ps-border);border-radius:var(--ps-radius-md);overflow:hidden;">
+            <div id="toggle-acumulado-base" style="display:flex;border:1.5px solid var(--ps-border);border-radius:var(--ps-radius-md);overflow:hidden;">
               <button class="ps-view-toggle active" data-vista="acumulado" onclick="cambiarVistaResiduos('acumulado')">Acumulado</button>
               <button class="ps-view-toggle" data-vista="base" onclick="cambiarVistaResiduos('base')">Por base</button>
             </div>
@@ -706,6 +727,82 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <div>Probá cambiar los filtros o cargar un nuevo registro</div>
         </div>
       </div>
+
+      </div>
+      <!-- fin subvista-residuos-general -->
+
+      <div id="subvista-residuos-manifiestos" style="display:none;">
+      <!-- CONTROL DE MANIFIESTOS — RESIDUOS PELIGROSOS -->
+      <div class="ps-content-card">
+        <div class="ps-content-card-title">
+          Control de Manifiestos — Residuos Peligrosos
+          <button class="ps-btn" style="padding:6px 10px;font-size:11px;" onclick="cambiarVistaGraficoManifiestos()" id="btn-toggle-grafico-manifiestos">📈 Ver evolución por año</button>
+        </div>
+
+        <div id="manif-alerta-pendientes"></div>
+
+        <div id="manif-grafico-wrap" style="display:none;height:220px;margin-bottom:16px;">
+          <canvas id="chart-manifiestos-anual"></canvas>
+        </div>
+
+        <div class="ps-filters">
+          <div class="ps-field">
+            <label>Base</label>
+            <select class="ps-select" id="filtro-base-manif" onchange="renderControlManifiestos()">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div class="ps-field">
+            <label>Año</label>
+            <select class="ps-select" id="filtro-anio-manif" onchange="renderControlManifiestos()">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div class="ps-field">
+            <label>Estado</label>
+            <select class="ps-select" id="filtro-estado-manif" onchange="renderControlManifiestos()">
+              <option value="">Todos</option>
+              <option>Cumplido</option>
+              <option>Pendiente</option>
+            </select>
+          </div>
+          <div class="ps-field" style="flex:1;">
+            <label>Buscar</label>
+            <input class="ps-input" style="width:100%;min-width:0;" id="filtro-texto-manif" placeholder="Manifiesto, operador, transportista..." oninput="renderControlManifiestos()">
+          </div>
+        </div>
+
+        <div class="ps-table-wrap">
+          <table class="ps-table" style="min-width:1400px;">
+            <thead>
+              <tr>
+                <th style="width:60px;">Mov.</th>
+                <th style="width:55px;">Año</th>
+                <th style="width:90px;">Fecha</th>
+                <th style="width:110px;">Manifiesto N°</th>
+                <th style="width:110px;">Transporte</th>
+                <th style="width:130px;">Descripción</th>
+                <th style="width:80px;">Cantidad</th>
+                <th style="width:130px;">Operador</th>
+                <th style="width:90px;">Fecha cert.</th>
+                <th style="width:90px;">N° cert.</th>
+                <th style="width:110px;">Lugar</th>
+                <th style="width:110px;">Adjuntos</th>
+                <th style="width:100px;">Estado</th>
+                <th style="width:70px;"></th>
+              </tr>
+            </thead>
+            <tbody id="tbody-manifiestos"></tbody>
+          </table>
+        </div>
+        <div class="ps-empty" id="manif-empty" style="display:none;">
+          <div class="ps-empty-icon">📋</div>
+          <div class="ps-empty-title">No hay movimientos que coincidan</div>
+          <div>Probá cambiar los filtros, o cargá un residuo de tipo "Peligroso" desde arriba</div>
+        </div>
+      </div>
+      </div>
+      <!-- fin subvista-residuos-manifiestos -->
     </div>
 
     <!-- MONITOREOS -->
@@ -1428,7 +1525,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
       <div class="ps-row-2">
         <div class="ps-field">
           <label>Tipo de residuo</label>
-          <select class="ps-select" id="r-tipo">
+          <select class="ps-select" id="r-tipo" onchange="toggleCamposPeligrosoModal()">
             <option>Peligroso</option>
             <option>Especial</option>
             <option>Común</option>
@@ -1442,8 +1539,21 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
       </div>
       <div class="ps-row-2">
         <div class="ps-field">
-          <label>Cantidad (kg)</label>
+          <label>Cantidad</label>
           <input class="ps-input" type="number" id="r-cantidad" placeholder="Ej: 120">
+        </div>
+        <div class="ps-field">
+          <label>Unidad</label>
+          <select class="ps-select" id="r-unidad">
+            <option>kg</option>
+            <option>Lts</option>
+          </select>
+        </div>
+      </div>
+      <div class="ps-row-2">
+        <div class="ps-field">
+          <label>Subtipo (opcional)</label>
+          <input class="ps-input" id="r-subtipo" placeholder="Ej: Sólido, Líquido, Cartón...">
         </div>
         <div class="ps-field">
           <label>Disposición final</label>
@@ -1463,6 +1573,54 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
         <label>N° de manifiesto</label>
         <input class="ps-input" id="r-manifiesto" placeholder="Opcional" style="width:100%;">
       </div>
+
+      <div id="r-campos-peligroso" style="display:flex;flex-direction:column;gap:14px;">
+        <hr style="border:none;border-top:1px solid var(--ps-border);margin:0;">
+        <div style="font-size:11px;font-weight:700;color:var(--ps-header-bg);text-transform:uppercase;letter-spacing:0.5px;">Control de manifiesto (Peligrosos)</div>
+        <div class="ps-row-2">
+          <div class="ps-field">
+            <label>N° de movimiento</label>
+            <input class="ps-input" type="number" id="r-n-movimiento" placeholder="Opcional">
+          </div>
+          <div class="ps-field">
+            <label>Transportista</label>
+            <input class="ps-input" id="r-transporte" placeholder="Ej: SERCO AMBIENTAL">
+          </div>
+        </div>
+        <div class="ps-field">
+          <label>Descripción del residuo (código Y)</label>
+          <input class="ps-input" id="r-descripcion" placeholder="Ej: Y8, Y48 Y9C" style="width:100%;">
+        </div>
+        <div class="ps-row-2">
+          <div class="ps-field">
+            <label>Fecha de certificado</label>
+            <input class="ps-input" type="date" id="r-fecha-certificado">
+          </div>
+          <div class="ps-field">
+            <label>N° de certificado</label>
+            <input class="ps-input" id="r-n-certificado" placeholder="Ej: 13127">
+          </div>
+        </div>
+        <div class="ps-row-2">
+          <div class="ps-field">
+            <label>¿Tiene certificado de disposición final?</label>
+            <select class="ps-select" id="r-certificado-ok">
+              <option value="">Sin definir</option>
+              <option value="SI">Sí</option>
+              <option value="NO">No</option>
+            </select>
+          </div>
+          <div class="ps-field">
+            <label>Estado del manifiesto</label>
+            <select class="ps-select" id="r-estado-manifiesto">
+              <option value="">Sin definir</option>
+              <option>Cumplido</option>
+              <option>Pendiente</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div style="font-size:11px;color:var(--ps-muted);">El manifiesto (archivo) y el certificado de disposición final se adjuntan desde la tabla, con el ícono 📎.</div>
     </div>
     <div class="ps-modal-footer">
@@ -2768,9 +2926,15 @@ async function refrescarAdjuntos_residuos_certificado() {
   renderResiduos();
 }
 
+function cambiarSubvistaResiduos(subvista) {
+  document.querySelectorAll('#toggle-subvista-residuos .ps-view-toggle').forEach(b => b.classList.toggle('active', b.dataset.subvista === subvista));
+  document.getElementById('subvista-residuos-general').style.display = subvista === 'general' ? 'block' : 'none';
+  document.getElementById('subvista-residuos-manifiestos').style.display = subvista === 'manifiestos' ? 'block' : 'none';
+}
+
 function cambiarVistaResiduos(vista) {
   vistaResiduos = vista;
-  document.querySelectorAll('.ps-view-toggle').forEach(b => b.classList.toggle('active', b.dataset.vista === vista));
+  document.querySelectorAll('#toggle-acumulado-base .ps-view-toggle').forEach(b => b.classList.toggle('active', b.dataset.vista === vista));
   document.getElementById('resumen-por-base').style.display = vista === 'base' ? 'block' : 'none';
   renderResiduos();
 }
@@ -2850,6 +3014,8 @@ function renderResiduos() {
   if (vistaResiduos === 'base') renderResumenPorBase(filtrados);
   renderChartResiduos();
   renderChartResiduosActual();
+  if (typeof renderControlManifiestos === 'function') renderControlManifiestos();
+  if (typeof renderDashboard === 'function') renderDashboard();
 }
 
 function renderKpisResiduos(filtrados) {
@@ -2973,8 +3139,15 @@ function renderChartResiduosActual() {
 
 let _residuoEditId = null;
 
+function toggleCamposPeligrosoModal() {
+  const esPeligroso = document.getElementById('r-tipo').value === 'Peligroso';
+  document.getElementById('r-campos-peligroso').style.display = esPeligroso ? 'flex' : 'none';
+}
+
 function abrirModalResiduo() {
   _residuoEditId = null;
+  document.getElementById('r-unidad').value = 'kg';
+  toggleCamposPeligrosoModal();
   document.getElementById('modal-residuo').classList.add('active');
 }
 function editarResiduo(id) {
@@ -2985,14 +3158,26 @@ function editarResiduo(id) {
   document.getElementById('r-tipo').value = r.tipo;
   document.getElementById('r-fecha').value = r.fecha;
   document.getElementById('r-cantidad').value = r.cantidad;
+  document.getElementById('r-unidad').value = r.unidad || 'kg';
+  document.getElementById('r-subtipo').value = r.subtipo || '';
   document.getElementById('r-operador').value = r.operador || '';
-  document.getElementById('r-disposicion').value = r.disposicion;
+  document.getElementById('r-disposicion').value = r.disposicion || 'Tratamiento';
   document.getElementById('r-manifiesto').value = r.manifiesto || '';
+  document.getElementById('r-n-movimiento').value = r.n_movimiento || '';
+  document.getElementById('r-transporte').value = r.transporte || '';
+  document.getElementById('r-descripcion').value = r.descripcion_residuo || '';
+  document.getElementById('r-fecha-certificado').value = r.fecha_certificado || '';
+  document.getElementById('r-n-certificado').value = r.n_certificado || '';
+  document.getElementById('r-certificado-ok').value = r.certificado_ok || '';
+  document.getElementById('r-estado-manifiesto').value = r.estado_manifiesto || '';
+  toggleCamposPeligrosoModal();
   document.getElementById('modal-residuo').classList.add('active');
 }
 function cerrarModalResiduo() {
   document.getElementById('modal-residuo').classList.remove('active');
-  ['r-base','r-fecha','r-cantidad','r-operador','r-manifiesto'].forEach(id => document.getElementById(id).value = '');
+  ['r-base','r-fecha','r-cantidad','r-operador','r-manifiesto','r-subtipo','r-n-movimiento','r-transporte','r-descripcion','r-fecha-certificado','r-n-certificado'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('r-certificado-ok').value = '';
+  document.getElementById('r-estado-manifiesto').value = '';
   _residuoEditId = null;
 }
 
@@ -3008,11 +3193,20 @@ async function guardarResiduo() {
   const datos = {
     base,
     tipo: document.getElementById('r-tipo').value,
+    subtipo: document.getElementById('r-subtipo').value.trim() || null,
+    unidad: document.getElementById('r-unidad').value,
     fecha,
     cantidad,
     operador,
     disposicion: document.getElementById('r-disposicion').value,
     manifiesto: document.getElementById('r-manifiesto').value.trim() || null,
+    n_movimiento: document.getElementById('r-n-movimiento').value ? parseInt(document.getElementById('r-n-movimiento').value, 10) : null,
+    transporte: document.getElementById('r-transporte').value.trim() || null,
+    descripcion_residuo: document.getElementById('r-descripcion').value.trim() || null,
+    fecha_certificado: document.getElementById('r-fecha-certificado').value || null,
+    n_certificado: document.getElementById('r-n-certificado').value.trim() || null,
+    certificado_ok: document.getElementById('r-certificado-ok').value || null,
+    estado_manifiesto: document.getElementById('r-estado-manifiesto').value || null,
   };
   try {
     if (_residuoEditId) {
@@ -3055,6 +3249,125 @@ async function eliminarResiduo(id) {
 }
 
 cargarResiduos();
+
+/* ══════════════ CONTROL DE MANIFIESTOS — RESIDUOS PELIGROSOS ══════════════ */
+let vistaGraficoManifiestos = false;
+let chartManifiestosAnualInstance = null;
+
+function cambiarVistaGraficoManifiestos() {
+  vistaGraficoManifiestos = !vistaGraficoManifiestos;
+  document.getElementById('manif-grafico-wrap').style.display = vistaGraficoManifiestos ? 'block' : 'none';
+  document.getElementById('btn-toggle-grafico-manifiestos').textContent = vistaGraficoManifiestos ? '📊 Ver tabla' : '📈 Ver evolución por año';
+  if (vistaGraficoManifiestos) renderChartManifiestosAnual();
+}
+
+function poblarFiltrosManifiestos(peligrosos) {
+  const selBase = document.getElementById('filtro-base-manif');
+  const actualBase = selBase.value;
+  const bases = [...new Set(peligrosos.map(r => r.base).filter(Boolean))].sort();
+  selBase.innerHTML = '<option value="">Todas</option>' + bases.map(b => `<option ${b === actualBase ? 'selected' : ''}>${b}</option>`).join('');
+
+  const selAnio = document.getElementById('filtro-anio-manif');
+  const actualAnio = selAnio.value;
+  const anios = [...new Set(peligrosos.map(r => r.fecha.slice(0,4)))].sort().reverse();
+  selAnio.innerHTML = '<option value="">Todos</option>' + anios.map(a => `<option ${a === actualAnio ? 'selected' : ''}>${a}</option>`).join('');
+}
+
+const badgeClaseEstadoManif = e => e === 'Cumplido' ? 'ps-badge-ok' : e === 'Pendiente' ? 'ps-badge-danger' : 'ps-badge-gray-custom';
+
+function renderControlManifiestos() {
+  const peligrosos = residuos.filter(r => r.tipo === 'Peligroso');
+  poblarFiltrosManifiestos(peligrosos);
+
+  const bFiltro = document.getElementById('filtro-base-manif').value;
+  const aFiltro = document.getElementById('filtro-anio-manif').value;
+  const eFiltro = document.getElementById('filtro-estado-manif').value;
+  const texto = document.getElementById('filtro-texto-manif').value.toLowerCase();
+
+  const filtrados = peligrosos.filter(r =>
+    (!bFiltro || r.base === bFiltro) &&
+    (!aFiltro || r.fecha.startsWith(aFiltro)) &&
+    (!eFiltro || r.estado_manifiesto === eFiltro) &&
+    (!texto || ((r.manifiesto||'') + (r.operador||'') + (r.transporte||'')).toLowerCase().includes(texto))
+  ).sort((a,b) => b.fecha.localeCompare(a.fecha));
+
+  // Alerta de pendientes (siempre sobre el total, no solo lo filtrado)
+  const pendientes = peligrosos.filter(r => r.estado_manifiesto === 'Pendiente');
+  const alerta = document.getElementById('manif-alerta-pendientes');
+  alerta.innerHTML = pendientes.length ? `
+    <div style="background:#fed7d7;color:#9b2c2c;padding:10px 16px;border-radius:10px;margin-bottom:14px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:space-between;">
+      <span>⚠️ ${pendientes.length} manifiesto${pendientes.length>1?'s':''} pendiente${pendientes.length>1?'s':''} de certificado — hay que reclamarlo al operador/transportista</span>
+      <button class="ps-btn" style="padding:5px 10px;font-size:11px;" onclick="document.getElementById('filtro-estado-manif').value='Pendiente';renderControlManifiestos();">Ver solo pendientes</button>
+    </div>
+  ` : '';
+
+  const tbody = document.getElementById('tbody-manifiestos');
+  const empty = document.getElementById('manif-empty');
+  tbody.innerHTML = filtrados.map(r => {
+    const esPendiente = r.estado_manifiesto === 'Pendiente';
+    return `
+    <tr style="${esPendiente ? 'background:#fff5f5;' : ''}">
+      <td>${r.n_movimiento || '—'}</td>
+      <td>${r.fecha.slice(0,4)}</td>
+      <td>${formatFecha(r.fecha)}</td>
+      <td><span class="ps-td-1line" title="${r.manifiesto||''}"><strong>${r.manifiesto || '—'}</strong></span></td>
+      <td><span class="ps-td-1line" title="${r.transporte||''}">${r.transporte || '—'}</span></td>
+      <td><span class="ps-td-1line" title="${r.descripcion_residuo||''}">${r.descripcion_residuo || '—'}</span></td>
+      <td>${Number(r.cantidad).toLocaleString('es-AR')} <span style="color:var(--ps-muted);font-size:10.5px;">${r.unidad||''}</span></td>
+      <td><span class="ps-td-1line" title="${r.operador||''}">${r.operador || '—'}</span></td>
+      <td>${r.fecha_certificado ? formatFecha(r.fecha_certificado) : '—'}</td>
+      <td><span class="ps-td-1line" title="${r.n_certificado||''}">${r.n_certificado || '—'}</span></td>
+      <td><span class="ps-td-1line" title="${r.base||''}">${r.base || '—'}</span></td>
+      <td>
+        ${botonAdjuntos('residuos_manifiesto', r.id, 'residuos-manifiestos', _adjCacheManifiestos)}
+        ${botonAdjuntos('residuos_certificado', r.id, 'residuos-certificados', _adjCacheCertificados)}
+      </td>
+      <td><span class="ps-badge ${badgeClaseEstadoManif(r.estado_manifiesto)}">${r.estado_manifiesto || 'Sin definir'}</span></td>
+      <td style="white-space:nowrap;">
+        <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="editarResiduo('${r.id}')" title="Editar">✏️</button>
+        <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="eliminarResiduo('${r.id}')" title="Eliminar">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  tbody.closest('.ps-table-wrap').style.display = filtrados.length ? '' : 'none';
+  empty.style.display = filtrados.length ? 'none' : 'block';
+
+  if (vistaGraficoManifiestos) renderChartManifiestosAnual();
+}
+
+function renderChartManifiestosAnual() {
+  if (typeof Chart === 'undefined') return;
+  const peligrosos = residuos.filter(r => r.tipo === 'Peligroso');
+  const anios = [...new Set(peligrosos.map(r => r.fecha.slice(0,4)))].sort();
+
+  const solidoPorAnio = anios.map(a => peligrosos.filter(r => r.fecha.startsWith(a) && r.subtipo === 'Sólido').reduce((s,r) => s + Number(r.cantidad), 0));
+  const liquidoPorAnio = anios.map(a => peligrosos.filter(r => r.fecha.startsWith(a) && r.subtipo === 'Líquido').reduce((s,r) => s + Number(r.cantidad), 0));
+
+  const ctx = document.getElementById('chart-manifiestos-anual').getContext('2d');
+  if (chartManifiestosAnualInstance) chartManifiestosAnualInstance.destroy();
+  chartManifiestosAnualInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: anios,
+      datasets: [
+        { label: 'Sólido (kg)', data: solidoPorAnio, borderColor: '#e8a020', backgroundColor: 'transparent', borderWidth: 1.5, tension: 0.3, pointRadius: 2, yAxisID: 'ySolido' },
+        { label: 'Líquido (Lts)', data: liquidoPorAnio, borderColor: '#3182ce', backgroundColor: 'transparent', borderWidth: 1.5, tension: 0.3, pointRadius: 2, yAxisID: 'yLiquido' },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { font: { family: 'Segoe UI', size: 10.5 } } } },
+      scales: {
+        ySolido: { position: 'left', beginAtZero: true, ticks: { font: { size: 9.5 } }, title: { display: true, text: 'kg (Sólido)', font: { size: 9.5 } }, grid: { color: '#f0f2f6' } },
+        yLiquido: { position: 'right', beginAtZero: true, ticks: { font: { size: 9.5 } }, title: { display: true, text: 'Lts (Líquido)', font: { size: 9.5 } }, grid: { display: false } },
+        x: { ticks: { font: { size: 9.5 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
 
 /* ══════════════ MONITOREOS AMBIENTALES (conectado a Supabase) ══════════════ */
 const GA_TABLA_MONITOREOS = `${GA_SUPABASE_URL}/rest/v1/monitoreos`;
@@ -4585,6 +4898,56 @@ function renderDashboard() {
     }).length;
     document.getElementById('dash-monitoreos-value').textContent = delMes;
   }
+
+  // Manifiestos de Residuos Peligrosos pendientes de certificado
+  if (typeof residuos !== 'undefined') {
+    const pendientes = residuos.filter(r => r.tipo === 'Peligroso' && r.estado_manifiesto === 'Pendiente');
+    const valorEl = document.getElementById('dash-manifiestos-value');
+    if (valorEl) valorEl.textContent = pendientes.length;
+
+    const cont = document.getElementById('dash-manifiestos-pendientes');
+    if (cont) {
+      if (!pendientes.length) {
+        cont.innerHTML = `
+          <div class="ps-empty">
+            <div class="ps-empty-icon">✅</div>
+            <div class="ps-empty-title">Sin manifiestos pendientes</div>
+            <div>Todos los certificados de disposición final están al día</div>
+          </div>`;
+      } else {
+        const ordenados = [...pendientes].sort((a,b) => a.fecha.localeCompare(b.fecha));
+        cont.innerHTML = `
+          <div class="ps-table-wrap">
+            <table class="ps-table">
+              <thead><tr><th class="col-responsable">Fecha</th><th class="col-norma">Manifiesto</th><th class="col-alcance">Transporte</th><th class="col-alcance">Operador</th><th class="col-responsable">Base</th></tr></thead>
+              <tbody>
+                ${ordenados.map(r => `
+                  <tr>
+                    <td>${formatFecha(r.fecha)}</td>
+                    <td><strong>${r.manifiesto || '—'}</strong></td>
+                    <td><span class="ps-td-1line" title="${r.transporte||''}">${r.transporte || '—'}</span></td>
+                    <td><span class="ps-td-1line" title="${r.operador||''}">${r.operador || '—'}</span></td>
+                    <td>${r.base || '—'}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      }
+    }
+  }
+}
+
+// Lleva a Residuos → Control de Manifiestos, filtrado por Pendientes
+function irAManifiestosPendientes() {
+  document.querySelectorAll('.ps-nav-item').forEach(i => i.classList.remove('active'));
+  document.querySelectorAll('.ps-view').forEach(v => v.classList.remove('active'));
+  document.querySelector('.ps-nav-item[data-view="residuos"]').classList.add('active');
+  document.getElementById('view-residuos').classList.add('active');
+  document.getElementById('topbar-title').textContent = titles['residuos'][0];
+  document.getElementById('topbar-sub').textContent = titles['residuos'][1];
+  cambiarSubvistaResiduos('manifiestos');
+  document.getElementById('filtro-estado-manif').value = 'Pendiente';
+  renderControlManifiestos();
 }
 
 </script>
