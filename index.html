@@ -6,6 +6,7 @@
 <title>Gestión Ambiental — PETROSAR SA</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root {
   --ps-bg:           #f0f2f6;
@@ -319,10 +320,13 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <div class="ps-card-sub">Abiertas o vencidas</div>
         </div>
         <div class="ps-card">
-          <div class="ps-card-icon ps-icon-blue">🧪</div>
-          <div class="ps-card-label">Monitoreos</div>
-          <div class="ps-card-value" id="dash-monitoreos-value">—</div>
-          <div class="ps-card-sub">Cargados este mes</div>
+          <div class="ps-card-icon ps-icon-blue">🚦</div>
+          <div class="ps-card-label">Monitoreos del mes</div>
+          <div style="display:flex;gap:6px;justify-content:center;margin-bottom:6px;">
+            <span id="dash-monitoreos-cumplidos" style="background:#c6f6d5;color:#276749;padding:4px 11px;border-radius:20px;font-weight:800;font-size:15px;">—</span>
+            <span id="dash-monitoreos-pendientes" style="background:#fed7d7;color:#9b2c2c;padding:4px 11px;border-radius:20px;font-weight:800;font-size:15px;">—</span>
+          </div>
+          <div class="ps-card-sub">✅ Cumplidos · ⏳ Pendientes (Programa Anual)</div>
         </div>
       </div>
 
@@ -880,6 +884,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           Programa Anual de Monitoreos
           <div style="display:flex;gap:10px;">
             <select class="ps-select" id="filtro-anio-programa" onchange="renderProgramaMonitoreo()" style="min-width:90px;"></select>
+            <button class="ps-btn" onclick="abrirModalImportPrograma()">📥 Importar Excel</button>
             <button class="ps-btn ps-btn-primary" onclick="abrirModalProgramaItem()">+ Nuevo ítem</button>
           </div>
         </div>
@@ -1677,6 +1682,34 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
     <div class="ps-modal-footer">
       <button class="ps-btn" onclick="cerrarModalResiduo()">Cancelar</button>
       <button class="ps-btn ps-btn-primary" onclick="guardarResiduo()">Guardar registro</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: IMPORTAR PROGRAMA DESDE EXCEL -->
+<div class="ps-modal-overlay" id="modal-import-programa">
+  <div class="ps-modal">
+    <div class="ps-modal-header">
+      <div class="ps-modal-title">Importar Programa desde Excel</div>
+      <button class="ps-modal-close" onclick="cerrarModalImportPrograma()">✕</button>
+    </div>
+    <div class="ps-modal-body">
+      <div style="font-size:11px;color:var(--ps-muted);">
+        El archivo debe tener las columnas: Tema, Acciones a tomar, Ubicación, Medidas, Responsable, y los 12 meses (Enero a Diciembre) — igual estructura que tu cronograma habitual. Las celdas de Tema/Acción combinadas (una sola fila por tema) se completan solas para cada ubicación.
+      </div>
+      <div class="ps-field">
+        <label>Año que corresponde este programa</label>
+        <input class="ps-input" type="number" id="pgx-anio" placeholder="Ej: 2026">
+      </div>
+      <div class="ps-field">
+        <label>Archivo Excel (.xlsx)</label>
+        <input class="ps-input" type="file" id="pgx-archivo" accept=".xlsx,.xls" style="width:100%;padding:6px 10px;">
+      </div>
+      <div id="pgx-estado" style="font-size:12px;color:var(--ps-muted);"></div>
+    </div>
+    <div class="ps-modal-footer">
+      <button class="ps-btn" onclick="cerrarModalImportPrograma()">Cancelar</button>
+      <button class="ps-btn ps-btn-primary" id="pgx-btn-importar" onclick="importarProgramaExcel()">Importar</button>
     </div>
   </div>
 </div>
@@ -3673,6 +3706,7 @@ async function eliminarMonitoreo(id) {
 }
 
 cargarMonitoreos();
+cargarProgramaMonitoreo();
 
 /* ══════════════ PROGRAMA ANUAL DE MONITOREOS ══════════════ */
 const GA_TABLA_PROGRAMA = `${GA_SUPABASE_URL}/rest/v1/programa_monitoreo`;
@@ -3753,6 +3787,7 @@ function renderProgramaMonitoreo() {
   empty.style.display = items.length ? 'none' : 'block';
 
   renderKpisPrograma(items);
+  if (typeof renderDashboard === 'function') renderDashboard();
 }
 
 function renderKpisPrograma(items) {
@@ -3770,6 +3805,111 @@ function renderKpisPrograma(items) {
     <div class="ps-mini-kpi"><div class="ps-mini-kpi-value" style="color:#276749;">${totalCumplidos}</div><div class="ps-mini-kpi-label">Cumplidas</div></div>
     <div class="ps-mini-kpi"><div class="ps-mini-kpi-value" style="color:${pctGeneral===100?'#276749':'#92400e'};">${pctGeneral}%</div><div class="ps-mini-kpi-label">% Cumplimiento general</div></div>
   `;
+}
+
+function abrirModalImportPrograma() {
+  document.getElementById('pgx-anio').value = hoy().getFullYear();
+  document.getElementById('pgx-archivo').value = '';
+  document.getElementById('pgx-estado').textContent = '';
+  document.getElementById('modal-import-programa').classList.add('active');
+}
+function cerrarModalImportPrograma() {
+  document.getElementById('modal-import-programa').classList.remove('active');
+}
+function mostrarEstadoImportPrograma(msg, tipo) {
+  const el = document.getElementById('pgx-estado');
+  el.textContent = msg;
+  el.style.color = tipo === 'ok' ? '#276749' : tipo === 'error' ? '#9b2c2c' : 'var(--ps-muted)';
+}
+
+async function importarProgramaExcel() {
+  const anio = parseInt(document.getElementById('pgx-anio').value, 10);
+  const archivo = document.getElementById('pgx-archivo').files[0];
+  if (!anio) { alert('Ingresá el año antes de importar.'); return; }
+  if (!archivo) { alert('Elegí un archivo Excel.'); return; }
+  if (typeof XLSX === 'undefined') { alert('No se pudo cargar la librería de lectura de Excel. Revisá tu conexión.'); return; }
+
+  const btn = document.getElementById('pgx-btn-importar');
+  btn.disabled = true;
+  mostrarEstadoImportPrograma('Leyendo el archivo...', null);
+
+  try {
+    const buffer = await archivo.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const sheetName = wb.SheetNames.find(n => /cronograma/i.test(n)) || wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const filas = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+
+    const headerIdx = filas.findIndex(f => f[0] && String(f[0]).trim().toLowerCase() === 'tema');
+    if (headerIdx === -1) throw new Error('No se encontró la fila de encabezado con "Tema". Revisá el formato del archivo.');
+
+    const header = filas[headerIdx].map(h => (h || '').toString().trim().toLowerCase());
+    const nombresMesesBusqueda = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const idxTema = header.indexOf('tema');
+    const idxAccion = header.findIndex(h => h.includes('accion'));
+    const idxUbicacion = header.findIndex(h => h.includes('ubicaci'));
+    const idxMedida = header.findIndex(h => h.includes('medida'));
+    const idxResponsable = header.findIndex(h => h.includes('responsable'));
+    const idxMeses = nombresMesesBusqueda.map(m => header.indexOf(m));
+
+    if (idxUbicacion === -1) throw new Error('No se encontró la columna "Ubicación" en el archivo.');
+
+    let temaActual = null, accionActual = null;
+    const items = [];
+    for (let i = headerIdx + 1; i < filas.length; i++) {
+      const fila = filas[i];
+      if (!fila) continue;
+      const base = fila[idxUbicacion];
+      if (!base) continue; // fin de los datos o fila vacía
+      if (idxTema >= 0 && fila[idxTema]) temaActual = fila[idxTema];
+      if (idxAccion >= 0 && fila[idxAccion]) accionActual = fila[idxAccion];
+
+      items.push({
+        tema: temaActual ? String(temaActual).trim() : null,
+        accion: accionActual ? String(accionActual).trim() : null,
+        base: String(base).trim(),
+        medida: idxMedida >= 0 && fila[idxMedida] ? String(fila[idxMedida]).trim() : null,
+        responsable: idxResponsable >= 0 && fila[idxResponsable] ? String(fila[idxResponsable]).trim() : null,
+        meses: idxMeses.map(ix => (ix >= 0 && fila[ix]) ? String(fila[ix]).trim() : null),
+      });
+    }
+
+    if (!items.length) throw new Error('No se encontraron filas de datos debajo del encabezado.');
+
+    mostrarEstadoImportPrograma(`Se detectaron ${items.length} ítems. Cargando en la base...`, null);
+
+    let cargados = 0;
+    for (const item of items) {
+      const resp = await fetch(GA_TABLA_PROGRAMA, {
+        method: 'POST',
+        headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+        body: JSON.stringify({ anio, tema: item.tema, accion: item.accion, base: item.base, medida: item.medida, responsable: item.responsable }),
+      });
+      if (!resp.ok) continue;
+      const [nuevo] = await resp.json();
+      programaMonitoreo.push(nuevo);
+
+      const mesesData = item.meses.map((desc, idx) => ({ programa_id: nuevo.id, mes: idx + 1, descripcion: desc }));
+      const respMeses = await fetch(GA_TABLA_PROGRAMA_MES, {
+        method: 'POST',
+        headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+        body: JSON.stringify(mesesData),
+      });
+      if (respMeses.ok) {
+        const nuevosMeses = await respMeses.json();
+        programaMonitoreoMes.push(...nuevosMeses);
+      }
+      cargados++;
+      mostrarEstadoImportPrograma(`Cargando... ${cargados}/${items.length}`, null);
+    }
+
+    mostrarEstadoImportPrograma(`✔ Se importaron ${cargados} de ${items.length} ítems correctamente.`, 'ok');
+    renderProgramaMonitoreo();
+  } catch (err) {
+    mostrarEstadoImportPrograma('Error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function abrirModalProgramaItem() {
@@ -5303,14 +5443,20 @@ function renderDashboard() {
     document.getElementById('dash-notas-value').textContent = sinResponder;
   }
 
-  // Monitoreos cargados este mes
-  if (typeof monitoreos !== 'undefined') {
-    const anio = hoy().getFullYear(), mes = hoy().getMonth();
-    const delMes = monitoreos.filter(m => {
-      const [y, mm] = m.fecha.split('-');
-      return parseInt(y, 10) === anio && (parseInt(mm, 10) - 1) === mes;
-    }).length;
-    document.getElementById('dash-monitoreos-value').textContent = delMes;
+  // Semáforo de tareas del Programa Anual de Monitoreos correspondientes a este mes
+  if (typeof programaMonitoreoMes !== 'undefined') {
+    const anioActualDash = hoy().getFullYear();
+    const mesActualDash = hoy().getMonth() + 1; // 1-12
+    const idsDelAnio = new Set(programaMonitoreo.filter(p => p.anio === anioActualDash).map(p => p.id));
+    const delMesConTarea = programaMonitoreoMes.filter(m =>
+      idsDelAnio.has(m.programa_id) && m.mes === mesActualDash && m.descripcion && m.descripcion.trim()
+    );
+    const cumplidosMes = delMesConTarea.filter(m => m.cumplido).length;
+    const pendientesMes = delMesConTarea.length - cumplidosMes;
+    const elC = document.getElementById('dash-monitoreos-cumplidos');
+    const elP = document.getElementById('dash-monitoreos-pendientes');
+    if (elC) elC.textContent = `✅ ${cumplidosMes}`;
+    if (elP) elP.textContent = `⏳ ${pendientesMes}`;
   }
 
   // Manifiestos de Residuos Peligrosos pendientes de certificado
