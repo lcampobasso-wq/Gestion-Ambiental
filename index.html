@@ -4286,28 +4286,66 @@ function renderChartAgua() {
 function renderChartAguaActual() {
   if (typeof Chart === 'undefined') return;
   const anioActualNum = hoy().getFullYear();
-  const datos = totalesPorMesAgua(anioActualNum);
+  const baseFiltro = document.getElementById('filtro-base-agua').value;
+  const delAnio = agua.filter(a => a.periodo.startsWith(String(anioActualNum)));
 
   const ctx = document.getElementById('chart-agua-actual').getContext('2d');
   if (chartAguaActualInstance) chartAguaActualInstance.destroy();
-  chartAguaActualInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: mesesNombre,
-      datasets: [
-        { label: String(anioActualNum), data: datos, backgroundColor: '#3182ce99', borderRadius: 3, maxBarThickness: 22 },
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: true, ticks: { font: { size: 9.5 } }, title: { display: true, text: 'm³ consumidos', font: { size: 9.5 } }, grid: { color: '#f0f2f6' } },
-        x: { ticks: { font: { size: 9.5 } }, grid: { display: false } }
+
+  if (!baseFiltro) {
+    // "Todas" las bases: barra apilada, un color distinto por base
+    const paletaColores = ['#3182ce', '#e8a020', '#38a169', '#e53e3e', '#805ad5', '#dd6b20', '#319795', '#d53f8c', '#718096'];
+    const bases = [...new Set(delAnio.map(a => a.base || 'Sin base'))].sort();
+
+    const datasets = bases.map((base, i) => {
+      const totales = Array(12).fill(0);
+      delAnio.filter(a => (a.base || 'Sin base') === base).forEach(a => {
+        const mes = parseInt(a.periodo.split('-')[1], 10) - 1;
+        totales[mes] += Number(a.consumo);
+      });
+      return { label: base, data: totales, backgroundColor: paletaColores[i % paletaColores.length], borderRadius: 2, maxBarThickness: 22 };
+    });
+
+    chartAguaActualInstance = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: mesesNombre, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: true, position: 'top', labels: { font: { size: 9 }, boxWidth: 11, padding: 8 } } },
+        scales: {
+          y: { stacked: true, beginAtZero: true, ticks: { font: { size: 9.5 } }, title: { display: true, text: 'm³ consumidos', font: { size: 9.5 } }, grid: { color: '#f0f2f6' } },
+          x: { stacked: true, ticks: { font: { size: 9.5 } }, grid: { display: false } }
+        }
       }
-    }
-  });
+    });
+  } else {
+    // Base puntual: barra simple, como antes
+    const totales = Array(12).fill(0);
+    delAnio.filter(a => a.base === baseFiltro).forEach(a => {
+      const mes = parseInt(a.periodo.split('-')[1], 10) - 1;
+      totales[mes] += Number(a.consumo);
+    });
+
+    chartAguaActualInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: mesesNombre,
+        datasets: [
+          { label: baseFiltro, data: totales, backgroundColor: '#3182ce99', borderRadius: 3, maxBarThickness: 22 },
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { font: { size: 9.5 } }, title: { display: true, text: 'm³ consumidos', font: { size: 9.5 } }, grid: { color: '#f0f2f6' } },
+          x: { ticks: { font: { size: 9.5 } }, grid: { display: false } }
+        }
+      }
+    });
+  }
 }
 
 function abrirModalAgua() {
