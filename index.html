@@ -324,12 +324,6 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <div class="ps-card-value" id="dash-monitoreos-value">—</div>
           <div class="ps-card-sub">Cargados este mes</div>
         </div>
-        <div class="ps-card">
-          <div class="ps-card-icon ps-icon-red">📋</div>
-          <div class="ps-card-label">Manifiestos pendientes</div>
-          <div class="ps-card-value" id="dash-manifiestos-value">—</div>
-          <div class="ps-card-sub">Residuos peligrosos, reclamar certificado</div>
-        </div>
       </div>
 
       <div class="ps-grid-2">
@@ -341,14 +335,10 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <div class="ps-content-card-title">Seguimiento de planes de acción</div>
           <div id="dash-planes-accion"></div>
         </div>
-      </div>
-
-      <div class="ps-content-card">
-        <div class="ps-content-card-title">
-          Manifiestos de Residuos Peligrosos pendientes <span style="font-weight:400;font-size:11px;color:var(--ps-muted);">(reclamar certificado de disposición final)</span>
-          <button class="ps-btn" style="padding:6px 10px;font-size:11px;" onclick="irAManifiestosPendientes()">Ver todos →</button>
+        <div class="ps-content-card">
+          <div class="ps-content-card-title">Manifiestos pendientes</div>
+          <div id="dash-manifiestos-pendientes"></div>
         </div>
-        <div id="dash-manifiestos-pendientes"></div>
       </div>
     </div>
 
@@ -638,7 +628,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
               <option value="">Todos</option>
               <option>Peligroso</option>
               <option>Especial</option>
-              <option>Común</option>
+              <option>Sólido Urbano</option>
               <option>Reciclable</option>
             </select>
           </div>
@@ -1528,7 +1518,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <select class="ps-select" id="r-tipo" onchange="toggleCamposPeligrosoModal()">
             <option>Peligroso</option>
             <option>Especial</option>
-            <option>Común</option>
+            <option>Sólido Urbano</option>
             <option>Reciclable</option>
           </select>
         </div>
@@ -4902,8 +4892,6 @@ function renderDashboard() {
   // Manifiestos de Residuos Peligrosos pendientes de certificado
   if (typeof residuos !== 'undefined') {
     const pendientes = residuos.filter(r => r.tipo === 'Peligroso' && r.estado_manifiesto === 'Pendiente');
-    const valorEl = document.getElementById('dash-manifiestos-value');
-    if (valorEl) valorEl.textContent = pendientes.length;
 
     const cont = document.getElementById('dash-manifiestos-pendientes');
     if (cont) {
@@ -4915,22 +4903,10 @@ function renderDashboard() {
             <div>Todos los certificados de disposición final están al día</div>
           </div>`;
       } else {
-        const ordenados = [...pendientes].sort((a,b) => a.fecha.localeCompare(b.fecha));
         cont.innerHTML = `
-          <div class="ps-table-wrap">
-            <table class="ps-table">
-              <thead><tr><th class="col-responsable">Fecha</th><th class="col-norma">Manifiesto</th><th class="col-alcance">Transporte</th><th class="col-alcance">Operador</th><th class="col-responsable">Base</th></tr></thead>
-              <tbody>
-                ${ordenados.map(r => `
-                  <tr>
-                    <td>${formatFecha(r.fecha)}</td>
-                    <td><strong>${r.manifiesto || '—'}</strong></td>
-                    <td><span class="ps-td-1line" title="${r.transporte||''}">${r.transporte || '—'}</span></td>
-                    <td><span class="ps-td-1line" title="${r.operador||''}">${r.operador || '—'}</span></td>
-                    <td>${r.base || '—'}</td>
-                  </tr>`).join('')}
-              </tbody>
-            </table>
+          <div style="background:#fed7d7;color:#9b2c2c;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span>⚠️ ${pendientes.length} manifiesto${pendientes.length>1?'s':''} pendiente${pendientes.length>1?'s':''} de certificado — hay que reclamarlo al operador/transportista</span>
+            <button class="ps-btn" style="padding:5px 10px;font-size:11px;white-space:nowrap;" onclick="irAManifiestosPendientes()">Ver todos →</button>
           </div>`;
       }
     }
