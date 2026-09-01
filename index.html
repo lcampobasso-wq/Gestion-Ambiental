@@ -328,6 +328,12 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           </div>
           <div class="ps-card-sub">✅ Cumplidos · ⏳ Pendientes (Programa Anual)</div>
         </div>
+        <div class="ps-card">
+          <div class="ps-card-icon ps-icon-purple">📅</div>
+          <div class="ps-card-label">Programa de Monitoreo Anual</div>
+          <div class="ps-card-value" id="dash-programa-anual-value">—%</div>
+          <div class="ps-card-sub">Cumplimiento acumulado del año</div>
+        </div>
       </div>
 
       <div class="ps-grid-2">
@@ -894,21 +900,20 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <table class="ps-table" style="min-width:1200px;">
             <thead>
               <tr>
-                <th style="width:120px;">Tema</th>
-                <th style="width:140px;">Ubicación</th>
-                <th style="width:90px;">Medida</th>
-                <th style="width:60px;">Ene</th>
-                <th style="width:60px;">Feb</th>
-                <th style="width:60px;">Mar</th>
-                <th style="width:60px;">Abr</th>
-                <th style="width:60px;">May</th>
-                <th style="width:60px;">Jun</th>
-                <th style="width:60px;">Jul</th>
-                <th style="width:60px;">Ago</th>
-                <th style="width:60px;">Sep</th>
-                <th style="width:60px;">Oct</th>
-                <th style="width:60px;">Nov</th>
-                <th style="width:60px;">Dic</th>
+                <th style="width:180px;">Ubicación</th>
+                <th style="width:100px;">Medida</th>
+                <th style="width:55px;">Ene</th>
+                <th style="width:55px;">Feb</th>
+                <th style="width:55px;">Mar</th>
+                <th style="width:55px;">Abr</th>
+                <th style="width:55px;">May</th>
+                <th style="width:55px;">Jun</th>
+                <th style="width:55px;">Jul</th>
+                <th style="width:55px;">Ago</th>
+                <th style="width:55px;">Sep</th>
+                <th style="width:55px;">Oct</th>
+                <th style="width:55px;">Nov</th>
+                <th style="width:55px;">Dic</th>
                 <th style="width:90px;">% Cumpl.</th>
                 <th style="width:70px;"></th>
               </tr>
@@ -3724,7 +3729,7 @@ function cambiarSubvistaMonitoreos(subvista) {
 
 async function cargarProgramaMonitoreo() {
   const tbody = document.getElementById('tbody-programa-monitoreo');
-  tbody.innerHTML = `<tr><td colspan="17" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando programa...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="16" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando programa...</td></tr>`;
   try {
     const [respItems, respMeses] = await Promise.all([
       fetch(`${GA_TABLA_PROGRAMA}?select=*&order=tema.asc`, { headers: gaHeaders() }),
@@ -3735,7 +3740,7 @@ async function cargarProgramaMonitoreo() {
     programaMonitoreoMes = await respMeses.json();
     renderProgramaMonitoreo();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="17" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="16" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
   }
 }
 
@@ -3754,7 +3759,22 @@ function renderProgramaMonitoreo() {
   const tbody = document.getElementById('tbody-programa-monitoreo');
   const empty = document.getElementById('prog-empty');
 
-  tbody.innerHTML = items.map(p => {
+  let filasHtml = '';
+  let grupoActual = null; // clave: tema + '||' + accion
+
+  items.forEach(p => {
+    const claveGrupo = (p.tema || '') + '||' + (p.accion || '');
+    if (claveGrupo !== grupoActual) {
+      grupoActual = claveGrupo;
+      filasHtml += `
+        <tr>
+          <td colspan="16" style="background:#f7fafc;padding:10px 14px;">
+            <div style="font-family:var(--ps-font-title);font-weight:700;font-size:12.5px;color:var(--ps-header-bg);text-transform:uppercase;letter-spacing:0.5px;">${p.tema || 'Sin tema'}</div>
+            ${p.accion ? `<div style="font-size:12px;color:var(--ps-muted);margin-top:2px;font-weight:400;text-transform:none;letter-spacing:0;">${p.accion}</div>` : ''}
+          </td>
+        </tr>`;
+    }
+
     const meses = programaMonitoreoMes.filter(m => m.programa_id === p.id).sort((a,b) => a.mes - b.mes);
     const programados = meses.filter(m => m.descripcion && m.descripcion.trim());
     const cumplidos = programados.filter(m => m.cumplido);
@@ -3772,16 +3792,17 @@ function renderProgramaMonitoreo() {
       }
     }
 
-    return `
+    filasHtml += `
     <tr>
-      <td><span class="ps-td-clamp" title="${p.tema||''}"><strong>${p.tema||'—'}</strong></span></td>
       <td><span class="ps-td-clamp" title="${p.base||''}">${p.base||'—'}</span></td>
       <td><span class="ps-badge-juris">${p.medida||'—'}</span></td>
       ${celdasMeses.join('')}
       <td style="text-align:center;">${pct === null ? '<span style="color:var(--ps-muted);">—</span>' : `<strong style="color:${pct===100?'#276749':pct>0?'#92400e':'#9b2c2c'};">${pct}%</strong>`}</td>
       <td style="white-space:nowrap;"><button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="eliminarProgramaItem('${p.id}')" title="Eliminar ítem">🗑️</button></td>
     </tr>`;
-  }).join('');
+  });
+
+  tbody.innerHTML = filasHtml;
 
   tbody.closest('.ps-table-wrap').style.display = items.length ? '' : 'none';
   empty.style.display = items.length ? 'none' : 'block';
@@ -3822,15 +3843,28 @@ function mostrarEstadoImportPrograma(msg, tipo) {
   el.style.color = tipo === 'ok' ? '#276749' : tipo === 'error' ? '#9b2c2c' : 'var(--ps-muted)';
 }
 
+let _importandoProgramaEnCurso = false;
+
 async function importarProgramaExcel() {
+  if (_importandoProgramaEnCurso) return; // evita doble click / doble ejecución mientras está procesando
   const anio = parseInt(document.getElementById('pgx-anio').value, 10);
   const archivo = document.getElementById('pgx-archivo').files[0];
   if (!anio) { alert('Ingresá el año antes de importar.'); return; }
   if (!archivo) { alert('Elegí un archivo Excel.'); return; }
   if (typeof XLSX === 'undefined') { alert('No se pudo cargar la librería de lectura de Excel. Revisá tu conexión.'); return; }
 
+  const yaExisten = programaMonitoreo.some(p => p.anio === anio);
+  if (yaExisten) {
+    const continuar = confirm(`Ya hay ítems cargados para el año ${anio}. Si el archivo tiene las mismas filas, se van a duplicar.\n\n¿Confirmás que querés importar de todas formas?`);
+    if (!continuar) return;
+  }
+
+  _importandoProgramaEnCurso = true;
   const btn = document.getElementById('pgx-btn-importar');
+  const cancelarBtn = document.querySelector('#modal-import-programa .ps-modal-footer .ps-btn:not(.ps-btn-primary)');
   btn.disabled = true;
+  btn.textContent = 'Importando...';
+  if (cancelarBtn) cancelarBtn.disabled = true;
   mostrarEstadoImportPrograma('Leyendo el archivo...', null);
 
   try {
@@ -3909,6 +3943,9 @@ async function importarProgramaExcel() {
     mostrarEstadoImportPrograma('Error: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
+    btn.textContent = 'Importar';
+    if (cancelarBtn) cancelarBtn.disabled = false;
+    _importandoProgramaEnCurso = false;
   }
 }
 
@@ -5457,6 +5494,21 @@ function renderDashboard() {
     const elP = document.getElementById('dash-monitoreos-pendientes');
     if (elC) elC.textContent = `✅ ${cumplidosMes}`;
     if (elP) elP.textContent = `⏳ ${pendientesMes}`;
+
+    // % de cumplimiento acumulado del año: solo cuenta lo programado desde enero hasta el mes actual (inclusive)
+    const transcurridoConTarea = programaMonitoreoMes.filter(m =>
+      idsDelAnio.has(m.programa_id) && m.mes <= mesActualDash && m.descripcion && m.descripcion.trim()
+    );
+    const elAnual = document.getElementById('dash-programa-anual-value');
+    if (elAnual) {
+      if (!transcurridoConTarea.length) {
+        elAnual.textContent = '—';
+      } else {
+        const cumplidosAnual = transcurridoConTarea.filter(m => m.cumplido).length;
+        const pctAnual = Math.round((cumplidosAnual / transcurridoConTarea.length) * 100);
+        elAnual.textContent = pctAnual + '%';
+      }
+    }
   }
 
   // Manifiestos de Residuos Peligrosos pendientes de certificado
