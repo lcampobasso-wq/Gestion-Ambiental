@@ -355,11 +355,18 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
     <!-- INFORME MENSUAL -->
     <div class="ps-view" id="view-informe">
       <div class="ps-content-card ps-no-print">
-        <div class="ps-content-card-title">Generar informe de cierre mensual</div>
+        <div class="ps-content-card-title">Generar informe de cierre</div>
         <div class="ps-filters" style="align-items:flex-end;">
           <div class="ps-field">
+            <label>Tipo</label>
+            <div id="toggle-tipo-informe" style="display:flex;border:1.5px solid var(--ps-border);border-radius:var(--ps-radius-md);overflow:hidden;">
+              <button class="ps-view-toggle active" data-tipoinforme="mensual" onclick="cambiarTipoInforme('mensual')">Mensual</button>
+              <button class="ps-view-toggle" data-tipoinforme="anual" onclick="cambiarTipoInforme('anual')">Anual</button>
+            </div>
+          </div>
+          <div class="ps-field" id="campo-informe-mes">
             <label>Mes</label>
-            <select class="ps-select" id="informe-mes" onchange="generarInformeMensual()">
+            <select class="ps-select" id="informe-mes" onchange="generarInforme()">
               <option value="0">Enero</option><option value="1">Febrero</option><option value="2">Marzo</option>
               <option value="3">Abril</option><option value="4">Mayo</option><option value="5">Junio</option>
               <option value="6">Julio</option><option value="7">Agosto</option><option value="8">Septiembre</option>
@@ -368,7 +375,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           </div>
           <div class="ps-field">
             <label>Año</label>
-            <select class="ps-select" id="informe-anio" onchange="generarInformeMensual()"></select>
+            <select class="ps-select" id="informe-anio" onchange="generarInforme()"></select>
           </div>
           <button class="ps-btn ps-btn-accent" onclick="window.print()">🖨️ Imprimir / Exportar PDF</button>
         </div>
@@ -2244,6 +2251,7 @@ function renderRequisitos() {
 
   renderKpisRequisitos();
   if (typeof renderDashboard === 'function') renderDashboard();
+  if (typeof generarInforme === 'function') generarInforme();
 }
 
 function renderKpisRequisitos() {
@@ -2505,6 +2513,7 @@ function renderPermisos() {
 
   renderKpisPermisos(conEstado);
   if (typeof renderDashboard === 'function') renderDashboard();
+  if (typeof generarInforme === 'function') generarInforme();
 }
 
 function renderKpisPermisos(conEstado) {
@@ -2910,6 +2919,7 @@ function renderNotas() {
 
   renderKpisNotas(conEstado);
   if (typeof renderDashboard === 'function') renderDashboard();
+  if (typeof generarInforme === 'function') generarInforme();
 }
 
 async function eliminarNota(id) {
@@ -3190,6 +3200,7 @@ function renderResiduos() {
   renderChartResiduosActual();
   if (typeof renderControlManifiestos === 'function') renderControlManifiestos();
   if (typeof renderDashboard === 'function') renderDashboard();
+  if (typeof generarInforme === 'function') generarInforme();
 }
 
 function renderKpisResiduos(filtrados) {
@@ -3612,6 +3623,7 @@ function renderMonitoreos() {
 
   renderKpisMonitoreos(conResultado);
   if (typeof renderDashboard === 'function') renderDashboard();
+  if (typeof generarInforme === 'function') generarInforme();
 }
 
 function renderKpisMonitoreos(conResultado) {
@@ -3809,6 +3821,7 @@ function renderProgramaMonitoreo() {
 
   renderKpisPrograma(items);
   if (typeof renderDashboard === 'function') renderDashboard();
+  if (typeof generarInforme === 'function') generarInforme();
 }
 
 function renderKpisPrograma(items) {
@@ -4227,6 +4240,8 @@ function renderAgua() {
   renderKpisAgua(filtrados);
   renderChartAgua();
   renderChartAguaActual();
+  if (typeof renderDashboard === 'function') renderDashboard();
+  if (typeof generarInforme === 'function') generarInforme();
 }
 
 function renderKpisAgua(filtrados) {
@@ -4529,6 +4544,8 @@ function renderAuditorias() {
   empty.style.display = filtrados.length ? 'none' : 'block';
 
   renderKpisAuditorias(auditorias);
+  if (typeof renderDashboard === 'function') renderDashboard();
+  if (typeof generarInforme === 'function') generarInforme();
 }
 
 function renderKpisAuditorias(datos) {
@@ -4740,6 +4757,8 @@ function renderPlanesAccion() {
 
   renderKpisPlanesAccion(planesAccion);
   renderDashPlanesAccion();
+  if (typeof renderDashboard === 'function') renderDashboard();
+  if (typeof generarInforme === 'function') generarInforme();
 }
 
 function renderDashPlanesAccion() {
@@ -5114,21 +5133,89 @@ function esDelMes(fechaStr, anio, mes) {
 
 function poblarSelectorAnioInforme() {
   const anios = new Set([hoy().getFullYear()]);
-  residuos.forEach(r => anios.add(parseInt(r.fecha.slice(0,4), 10)));
-  agua.forEach(a => anios.add(parseInt(a.periodo.slice(0,4), 10)));
-  monitoreos.forEach(m => anios.add(parseInt(m.fecha.slice(0,4), 10)));
-  auditorias.forEach(a => anios.add(parseInt(a.fecha.slice(0,4), 10)));
-  notas.forEach(n => anios.add(parseInt(n.recepcion.slice(0,4), 10)));
+  residuos.forEach(r => r.fecha && anios.add(parseInt(r.fecha.slice(0,4), 10)));
+  agua.forEach(a => a.periodo && anios.add(parseInt(a.periodo.slice(0,4), 10)));
+  monitoreos.forEach(m => m.fecha && anios.add(parseInt(m.fecha.slice(0,4), 10)));
+  auditorias.forEach(a => a.fecha && anios.add(parseInt(a.fecha.slice(0,4), 10)));
+  notas.forEach(n => n.recepcion && anios.add(parseInt(n.recepcion.slice(0,4), 10)));
 
   const sel = document.getElementById('informe-anio');
+  const actual = sel.value;
   const ordenados = [...anios].sort((a,b) => b - a);
   sel.innerHTML = ordenados.map(a => `<option value="${a}">${a}</option>`).join('');
-  sel.value = hoy().getFullYear();
-  document.getElementById('informe-mes').value = hoy().getMonth();
+  sel.value = (actual && ordenados.includes(parseInt(actual, 10))) ? actual : hoy().getFullYear();
+
+  if (!document.getElementById('informe-mes').value) {
+    document.getElementById('informe-mes').value = hoy().getMonth();
+  }
 }
 
 function filaOVacio(filas, colspan, mensaje) {
   return filas.length ? filas : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--ps-muted);padding:14px;">${mensaje}</td></tr>`;
+}
+
+let tipoInformeActual = 'mensual';
+
+function cambiarTipoInforme(tipo) {
+  tipoInformeActual = tipo;
+  document.querySelectorAll('#toggle-tipo-informe .ps-view-toggle').forEach(b => b.classList.toggle('active', b.dataset.tipoinforme === tipo));
+  document.getElementById('campo-informe-mes').style.display = tipo === 'mensual' ? 'flex' : 'none';
+  generarInforme();
+}
+
+function generarInforme() {
+  if (typeof poblarSelectorAnioInforme === 'function') poblarSelectorAnioInforme();
+  if (tipoInformeActual === 'anual') {
+    generarInformeAnual();
+  } else {
+    generarInformeMensual();
+  }
+}
+
+// Agrupa residuos por Tipo + Subtipo, respetando la unidad de cada uno (nunca mezcla kg con Lts)
+function agruparResiduosPorTipoUnidad(lista) {
+  const grupos = {};
+  lista.forEach(r => {
+    const clave = r.tipo + (r.subtipo ? ' — ' + r.subtipo : '');
+    if (!grupos[clave]) grupos[clave] = { cantidad: 0, unidad: r.unidad || 'kg' };
+    grupos[clave].cantidad += Number(r.cantidad);
+  });
+  return grupos;
+}
+
+function seccionManifiestosPendientesInforme(pendientesDelPeriodo, pendientesSnapshot) {
+  return `
+    <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Manifiestos de Residuos Peligrosos</div>
+      <p style="font-size:13px;margin-bottom:10px;"><strong>${pendientesSnapshot.length}</strong> pendientes de certificado a la fecha (reclamar al operador/transportista)</p>
+      ${pendientesSnapshot.length ? `
+        <div class="ps-table-wrap">
+          <table class="ps-table">
+            <thead><tr><th>Fecha</th><th>Manifiesto</th><th>Transporte</th><th>Operador</th><th>Base</th></tr></thead>
+            <tbody>${pendientesSnapshot.slice(0,15).map(r => `<tr><td>${formatFecha(r.fecha)}</td><td>${r.manifiesto||'—'}</td><td>${r.transporte||'—'}</td><td>${r.operador||'—'}</td><td>${r.base||'—'}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+        ${pendientesSnapshot.length > 15 ? `<p style="font-size:11px;color:var(--ps-muted);margin-top:6px;">Mostrando los primeros 15 de ${pendientesSnapshot.length}. Ver el listado completo en Residuos → Control de Manifiestos.</p>` : ''}
+      ` : '<p style="color:var(--ps-muted);font-size:13px;">Sin manifiestos pendientes.</p>'}
+    </div>`;
+}
+
+function seccionProgramaMonitoreoInforme(tareas) {
+  const cumplidas = tareas.filter(t => t.cumplido);
+  const pendientes = tareas.filter(t => !t.cumplido);
+  const pct = tareas.length ? Math.round((cumplidas.length / tareas.length) * 100) : null;
+  return `
+    <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Programa de Monitoreo Anual</div>
+      <p style="font-size:13px;margin-bottom:10px;"><strong>${tareas.length}</strong> tareas programadas · <strong>${cumplidas.length}</strong> cumplidas · <strong>${pendientes.length}</strong> pendientes ${pct !== null ? `· <strong>${pct}%</strong> de cumplimiento` : ''}</p>
+      ${pendientes.length ? `
+        <div class="ps-table-wrap">
+          <table class="ps-table">
+            <thead><tr><th>Tema</th><th>Ubicación</th><th>Tarea</th></tr></thead>
+            <tbody>${pendientes.map(t => `<tr><td>${t.tema||'—'}</td><td>${t.base||'—'}</td><td>${t.descripcion}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>` : (tareas.length ? '<p style="color:var(--ps-muted);font-size:13px;">Todas las tareas programadas están cumplidas.</p>' : '<p style="color:var(--ps-muted);font-size:13px;">No hay tareas programadas en este período.</p>')}
+    </div>`;
 }
 
 function generarInformeMensual() {
@@ -5138,12 +5225,10 @@ function generarInformeMensual() {
 
   // --- Datos del mes por módulo ---
   const residuosMes = residuos.filter(r => esDelMes(r.fecha, anio, mes));
-  const totalKgMes = residuosMes.reduce((s,r) => s + r.cantidad, 0);
-  const kgPorTipo = {};
-  residuosMes.forEach(r => { kgPorTipo[r.tipo] = (kgPorTipo[r.tipo] || 0) + r.cantidad; });
+  const gruposResiduos = agruparResiduosPorTipoUnidad(residuosMes);
 
   const aguaMes = agua.filter(a => a.periodo === periodoStr);
-  const totalAguaMes = aguaMes.reduce((s,a) => s + a.consumo, 0);
+  const totalAguaMes = aguaMes.reduce((s,a) => s + Number(a.consumo), 0);
 
   const monitoreosMes = monitoreos.filter(m => esDelMes(m.fecha, anio, mes));
   const excedentesMes = monitoreosMes.filter(m => m.valor > m.limite);
@@ -5166,6 +5251,12 @@ function generarInformeMensual() {
   const reqPendientes = requisitos.filter(r => r.estado === 'Pendiente').length;
   const reqVencidos = requisitos.filter(r => r.estado === 'Vencido').length;
 
+  const manifiestosPendientesSnapshot = residuos.filter(r => r.tipo === 'Peligroso' && r.estado_manifiesto === 'Pendiente').sort((a,b) => a.fecha.localeCompare(b.fecha));
+
+  const idsProgramaDelAnio = new Set(programaMonitoreo.filter(p => p.anio === anio).map(p => p.id));
+  const tareasProgramaMes = programaMonitoreoMes.filter(m => idsProgramaDelAnio.has(m.programa_id) && m.mes === (mes+1) && m.descripcion && m.descripcion.trim())
+    .map(m => ({ ...m, ...programaMonitoreo.find(p => p.id === m.programa_id) }));
+
   // --- Render ---
   document.getElementById('informe-contenido').innerHTML = `
     <div class="ps-informe-header">
@@ -5176,24 +5267,28 @@ function generarInformeMensual() {
     <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Resumen ejecutivo</div>
       <div class="ps-informe-stats">
-        <div class="ps-informe-stat"><div class="ps-informe-stat-value">${totalKgMes.toLocaleString('es-AR')}</div><div class="ps-informe-stat-label">Kg residuos</div><div class="ps-informe-stat-sub">generados en el mes</div></div>
+        <div class="ps-informe-stat"><div class="ps-informe-stat-value">${residuosMes.length}</div><div class="ps-informe-stat-label">Registros de residuos</div><div class="ps-informe-stat-sub">cargados en el mes</div></div>
         <div class="ps-informe-stat"><div class="ps-informe-stat-value">${totalAguaMes.toLocaleString('es-AR')}</div><div class="ps-informe-stat-label">M³ agua</div><div class="ps-informe-stat-sub">consumidos en el mes</div></div>
         <div class="ps-informe-stat"><div class="ps-informe-stat-value" style="color:${excedentesMes.length ? '#c53030' : '#276749'};">${monitoreosMes.length}</div><div class="ps-informe-stat-label">Monitoreos</div><div class="ps-informe-stat-sub">${excedentesMes.length} excedieron límite</div></div>
-        <div class="ps-informe-stat"><div class="ps-informe-stat-value">${auditoriasMes.length}</div><div class="ps-informe-stat-label">Auditorías</div><div class="ps-informe-stat-sub">realizadas en el mes</div></div>
+        <div class="ps-informe-stat"><div class="ps-informe-stat-value" style="color:${manifiestosPendientesSnapshot.length ? '#c53030' : '#276749'};">${manifiestosPendientesSnapshot.length}</div><div class="ps-informe-stat-label">Manifiestos pend.</div><div class="ps-informe-stat-sub">certificado sin recibir</div></div>
         <div class="ps-informe-stat"><div class="ps-informe-stat-value">${planesCerradosMes.length}</div><div class="ps-informe-stat-label">Planes cerrados</div><div class="ps-informe-stat-sub">${planesPendientesSnapshot.length} siguen pendientes</div></div>
       </div>
     </div>
 
     <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Gestión de Residuos</div>
-      ${residuosMes.length ? `
+      ${Object.keys(gruposResiduos).length ? `
         <div class="ps-table-wrap">
           <table class="ps-table">
-            <thead><tr><th>Tipo</th><th>Kg generados</th></tr></thead>
-            <tbody>${Object.entries(kgPorTipo).map(([tipo,kg]) => `<tr><td>${tipo}</td><td>${kg.toLocaleString('es-AR')}</td></tr>`).join('')}</tbody>
+            <thead><tr><th>Tipo</th><th>Cantidad</th><th>Unidad</th></tr></thead>
+            <tbody>${Object.entries(gruposResiduos).map(([clave,g]) => `<tr><td>${clave}</td><td>${g.cantidad.toLocaleString('es-AR')}</td><td>${g.unidad}</td></tr>`).join('')}</tbody>
           </table>
         </div>` : '<p style="color:var(--ps-muted);font-size:13px;">Sin registros de residuos este mes.</p>'}
     </div>
+
+    ${seccionManifiestosPendientesInforme(residuosMes.filter(r=>r.estado_manifiesto==='Pendiente'), manifiestosPendientesSnapshot)}
+
+    ${seccionProgramaMonitoreoInforme(tareasProgramaMes)}
 
     <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Monitoreos Ambientales</div>
@@ -5254,6 +5349,137 @@ function generarInformeMensual() {
     <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Matriz de Requisitos Legales (estado a la fecha)</div>
       <p style="font-size:13px;"><strong>${reqCumplidos}</strong> cumplidos · <strong>${reqPendientes}</strong> pendientes · <strong>${reqVencidos}</strong> vencidos</p>
+    </div>
+  `;
+}
+
+function generarInformeAnual() {
+  const anio = parseInt(document.getElementById('informe-anio').value, 10);
+
+  const residuosAnio = residuos.filter(r => r.fecha && r.fecha.startsWith(String(anio)));
+  const gruposResiduos = agruparResiduosPorTipoUnidad(residuosAnio);
+
+  const aguaAnio = agua.filter(a => a.periodo.startsWith(String(anio)));
+  const totalAguaAnio = aguaAnio.reduce((s,a) => s + Number(a.consumo), 0);
+
+  const monitoreosAnio = monitoreos.filter(m => m.fecha && m.fecha.startsWith(String(anio)));
+  const excedentesAnio = monitoreosAnio.filter(m => m.valor > m.limite);
+
+  const auditoriasAnio = auditorias.filter(a => a.fecha && a.fecha.startsWith(String(anio)));
+  const hallazgosAbiertosAnio = auditoriasAnio.filter(a => a.estado !== 'Cerrado').length;
+
+  const notasAnio = notas.filter(n => n.recepcion && n.recepcion.startsWith(String(anio)));
+  const notasRespondidasAnio = notas.filter(n => n.respuesta_fecha && n.respuesta_fecha.startsWith(String(anio)));
+  const notasVencidasSnapshot = notas.filter(n => estadoNota(n) === 'Vencida');
+
+  const planesCerradosAnio = planesAccion.filter(p => p.fecha_cumplido && p.fecha_cumplido.startsWith(String(anio)));
+  const planesPendientesSnapshot = planesAccion.filter(p => p.estado !== 'Cumplido');
+
+  const permisosVencenAnio = permisos.filter(p => p.vencimiento && p.vencimiento.startsWith(String(anio)));
+  const permisosConEstado = permisos.map(p => ({ ...p, estadoCalc: calcularEstadoPermiso(p.vencimiento) }));
+  const permisosVigentes = permisosConEstado.filter(p => p.estadoCalc === 'Vigente').length;
+  const permisosVencidosSnapshot = permisosConEstado.filter(p => p.estadoCalc === 'Vencido').length;
+
+  const reqCumplidos = requisitos.filter(r => r.estado === 'Cumplido').length;
+  const reqPendientes = requisitos.filter(r => r.estado === 'Pendiente').length;
+  const reqVencidos = requisitos.filter(r => r.estado === 'Vencido').length;
+  const totalReq = requisitos.length || 1;
+
+  const manifiestosPendientesSnapshot = residuos.filter(r => r.tipo === 'Peligroso' && r.estado_manifiesto === 'Pendiente').sort((a,b) => a.fecha.localeCompare(b.fecha));
+  const manifiestosCerradosAnio = residuosAnio.filter(r => r.tipo === 'Peligroso' && r.estado_manifiesto === 'Cumplido').length;
+  const manifiestosDelAnio = residuosAnio.filter(r => r.tipo === 'Peligroso').length;
+
+  const idsProgramaDelAnio = new Set(programaMonitoreo.filter(p => p.anio === anio).map(p => p.id));
+  const tareasProgramaAnio = programaMonitoreoMes.filter(m => idsProgramaDelAnio.has(m.programa_id) && m.descripcion && m.descripcion.trim())
+    .map(m => ({ ...m, ...programaMonitoreo.find(p => p.id === m.programa_id) }));
+  const cumplidasPrograma = tareasProgramaAnio.filter(t => t.cumplido).length;
+  const pctPrograma = tareasProgramaAnio.length ? Math.round((cumplidasPrograma / tareasProgramaAnio.length) * 100) : null;
+
+  document.getElementById('informe-contenido').innerHTML = `
+    <div class="ps-informe-header">
+      <h1>Informe de Cierre Ambiental Anual — ${anio}</h1>
+      <p>PETROSAR SA — SSA/HSE · Generado el ${formatFecha(hoy().toISOString().slice(0,10))}</p>
+    </div>
+
+    <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Resumen ejecutivo del año</div>
+      <div class="ps-informe-stats">
+        <div class="ps-informe-stat"><div class="ps-informe-stat-value">${residuosAnio.length}</div><div class="ps-informe-stat-label">Registros de residuos</div><div class="ps-informe-stat-sub">cargados en el año</div></div>
+        <div class="ps-informe-stat"><div class="ps-informe-stat-value">${totalAguaAnio.toLocaleString('es-AR')}</div><div class="ps-informe-stat-label">M³ agua</div><div class="ps-informe-stat-sub">consumidos en el año</div></div>
+        <div class="ps-informe-stat"><div class="ps-informe-stat-value" style="color:${excedentesAnio.length ? '#c53030' : '#276749'};">${monitoreosAnio.length}</div><div class="ps-informe-stat-label">Monitoreos</div><div class="ps-informe-stat-sub">${excedentesAnio.length} excedieron límite</div></div>
+        <div class="ps-informe-stat"><div class="ps-informe-stat-value" style="color:${manifiestosPendientesSnapshot.length ? '#c53030' : '#276749'};">${manifiestosPendientesSnapshot.length}</div><div class="ps-informe-stat-label">Manifiestos pend.</div><div class="ps-informe-stat-sub">a la fecha (todos los años)</div></div>
+        <div class="ps-informe-stat"><div class="ps-informe-stat-value">${planesCerradosAnio.length}</div><div class="ps-informe-stat-label">Planes cerrados</div><div class="ps-informe-stat-sub">${planesPendientesSnapshot.length} siguen pendientes</div></div>
+        <div class="ps-informe-stat"><div class="ps-informe-stat-value" style="color:${pctPrograma===null?'var(--ps-text)':pctPrograma===100?'#276749':'#92400e'};">${pctPrograma===null?'—':pctPrograma+'%'}</div><div class="ps-informe-stat-label">Programa Monitoreo</div><div class="ps-informe-stat-sub">cumplimiento del año</div></div>
+      </div>
+    </div>
+
+    <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Gestión de Residuos — Totales del año</div>
+      ${Object.keys(gruposResiduos).length ? `
+        <div class="ps-table-wrap">
+          <table class="ps-table">
+            <thead><tr><th>Tipo</th><th>Cantidad</th><th>Unidad</th></tr></thead>
+            <tbody>${Object.entries(gruposResiduos).map(([clave,g]) => `<tr><td>${clave}</td><td>${g.cantidad.toLocaleString('es-AR')}</td><td>${g.unidad}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>` : '<p style="color:var(--ps-muted);font-size:13px;">Sin registros de residuos en el año.</p>'}
+    </div>
+
+    <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Manifiestos de Residuos Peligrosos</div>
+      <p style="font-size:13px;margin-bottom:10px;">
+        <strong>${manifiestosDelAnio}</strong> movimientos en el año ·
+        <strong>${manifiestosCerradosAnio}</strong> con certificado recibido ·
+        <strong>${manifiestosPendientesSnapshot.length}</strong> pendientes a la fecha (de cualquier año)
+      </p>
+      ${manifiestosPendientesSnapshot.length ? `
+        <div class="ps-table-wrap">
+          <table class="ps-table">
+            <thead><tr><th>Fecha</th><th>Manifiesto</th><th>Transporte</th><th>Operador</th><th>Base</th></tr></thead>
+            <tbody>${manifiestosPendientesSnapshot.slice(0,15).map(r => `<tr><td>${formatFecha(r.fecha)}</td><td>${r.manifiesto||'—'}</td><td>${r.transporte||'—'}</td><td>${r.operador||'—'}</td><td>${r.base||'—'}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+        ${manifiestosPendientesSnapshot.length > 15 ? `<p style="font-size:11px;color:var(--ps-muted);margin-top:6px;">Mostrando los primeros 15 de ${manifiestosPendientesSnapshot.length}.</p>` : ''}
+      ` : '<p style="color:var(--ps-muted);font-size:13px;">Sin manifiestos pendientes.</p>'}
+    </div>
+
+    <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Programa de Monitoreo Anual — ${anio}</div>
+      <p style="font-size:13px;">
+        <strong>${tareasProgramaAnio.length}</strong> tareas programadas en el año ·
+        <strong>${cumplidasPrograma}</strong> cumplidas ·
+        <strong>${tareasProgramaAnio.length - cumplidasPrograma}</strong> pendientes
+        ${pctPrograma !== null ? ` · <strong>${pctPrograma}%</strong> de cumplimiento` : ''}
+      </p>
+    </div>
+
+    <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Monitoreos Ambientales del año</div>
+      <p style="font-size:13px;"><strong>${monitoreosAnio.length}</strong> mediciones cargadas · <strong>${excedentesAnio.length}</strong> excedieron el límite permitido</p>
+    </div>
+
+    <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Auditorías e Inspecciones del año</div>
+      <p style="font-size:13px;"><strong>${auditoriasAnio.length}</strong> auditorías realizadas · <strong>${hallazgosAbiertosAnio}</strong> hallazgos siguen abiertos o en curso</p>
+    </div>
+
+    <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Notas recibidas de organismos — Totales del año</div>
+      <p style="font-size:13px;"><strong>${notasAnio.length}</strong> recibidas en el año · <strong>${notasRespondidasAnio.length}</strong> respondidas en el año · <strong>${notasVencidasSnapshot.length}</strong> vencidas sin responder (a la fecha, de cualquier año)</p>
+    </div>
+
+    <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Planes de Acción — Totales del año</div>
+      <p style="font-size:13px;"><strong>${planesCerradosAnio.length}</strong> planes cerrados durante el año · <strong>${planesPendientesSnapshot.length}</strong> siguen pendientes a la fecha</p>
+    </div>
+
+    <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Permisos, Habilitaciones y Registros</div>
+      <p style="font-size:13px;"><strong>${permisosVigentes}</strong> vigentes a la fecha · <strong>${permisosVencidosSnapshot}</strong> vencidos a la fecha · <strong>${permisosVencenAnio.length}</strong> vencieron o vencen durante ${anio}</p>
+    </div>
+
+    <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Matriz de Requisitos Legales</div>
+      <p style="font-size:13px;"><strong>${reqCumplidos}</strong> cumplidos · <strong>${reqPendientes}</strong> pendientes · <strong>${reqVencidos}</strong> vencidos (${Math.round((reqCumplidos/totalReq)*100)}% de cumplimiento a la fecha)</p>
     </div>
   `;
 }
@@ -5457,7 +5683,7 @@ async function guardarDocSgi() {
 }
 
 poblarSelectorAnioInforme();
-generarInformeMensual();
+generarInforme();
 
 /* ══════════════ DASHBOARD ══════════════ */
 function renderDashboard() {
