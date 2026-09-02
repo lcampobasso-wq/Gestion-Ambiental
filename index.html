@@ -5131,6 +5131,7 @@ function esDelMes(fechaStr, anio, mes) {
   return parseInt(fechaStr.slice(0,4), 10) === anio && (parseInt(fechaStr.slice(5,7), 10) - 1) === mes;
 }
 
+let _informeMesInicializado = false;
 function poblarSelectorAnioInforme() {
   const anios = new Set([hoy().getFullYear()]);
   residuos.forEach(r => r.fecha && anios.add(parseInt(r.fecha.slice(0,4), 10)));
@@ -5145,8 +5146,11 @@ function poblarSelectorAnioInforme() {
   sel.innerHTML = ordenados.map(a => `<option value="${a}">${a}</option>`).join('');
   sel.value = (actual && ordenados.includes(parseInt(actual, 10))) ? actual : hoy().getFullYear();
 
-  if (!document.getElementById('informe-mes').value) {
+  // Solo la primera vez seteamos el mes actual por defecto; después respetamos lo que haya elegido el usuario
+  // (no podemos usar sel.value truthy-check porque "0" = Enero es un string truthy igual)
+  if (!_informeMesInicializado) {
     document.getElementById('informe-mes').value = hoy().getMonth();
+    _informeMesInicializado = true;
   }
 }
 
@@ -5187,34 +5191,25 @@ function seccionManifiestosPendientesInforme(pendientesDelPeriodo, pendientesSna
   return `
     <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Manifiestos de Residuos Peligrosos</div>
-      <p style="font-size:13px;margin-bottom:10px;"><strong>${pendientesSnapshot.length}</strong> pendientes de certificado a la fecha (reclamar al operador/transportista)</p>
-      ${pendientesSnapshot.length ? `
-        <div class="ps-table-wrap">
-          <table class="ps-table">
-            <thead><tr><th>Fecha</th><th>Manifiesto</th><th>Transporte</th><th>Operador</th><th>Base</th></tr></thead>
-            <tbody>${pendientesSnapshot.slice(0,15).map(r => `<tr><td>${formatFecha(r.fecha)}</td><td>${r.manifiesto||'—'}</td><td>${r.transporte||'—'}</td><td>${r.operador||'—'}</td><td>${r.base||'—'}</td></tr>`).join('')}</tbody>
-          </table>
-        </div>
-        ${pendientesSnapshot.length > 15 ? `<p style="font-size:11px;color:var(--ps-muted);margin-top:6px;">Mostrando los primeros 15 de ${pendientesSnapshot.length}. Ver el listado completo en Residuos → Control de Manifiestos.</p>` : ''}
-      ` : '<p style="color:var(--ps-muted);font-size:13px;">Sin manifiestos pendientes.</p>'}
+      <p style="font-size:13px;"><strong>${pendientesSnapshot.length}</strong> pendientes de certificado a la fecha (reclamar al operador/transportista)</p>
     </div>`;
 }
 
-function seccionProgramaMonitoreoInforme(tareas) {
-  const cumplidas = tareas.filter(t => t.cumplido);
-  const pendientes = tareas.filter(t => !t.cumplido);
-  const pct = tareas.length ? Math.round((cumplidas.length / tareas.length) * 100) : null;
+function seccionProgramaMonitoreoInforme(tareasDelMes, pendientesAcumuladas) {
+  const cumplidasMes = tareasDelMes.filter(t => t.cumplido);
+  const pctMes = tareasDelMes.length ? Math.round((cumplidasMes.length / tareasDelMes.length) * 100) : null;
+  const pendientesOrdenadas = [...pendientesAcumuladas].sort((a,b) => a.mes - b.mes);
   return `
     <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Programa de Monitoreo Anual</div>
-      <p style="font-size:13px;margin-bottom:10px;"><strong>${tareas.length}</strong> tareas programadas · <strong>${cumplidas.length}</strong> cumplidas · <strong>${pendientes.length}</strong> pendientes ${pct !== null ? `· <strong>${pct}%</strong> de cumplimiento` : ''}</p>
-      ${pendientes.length ? `
+      <p style="font-size:13px;margin-bottom:10px;"><strong>${tareasDelMes.length}</strong> tareas programadas este mes · <strong>${cumplidasMes.length}</strong> cumplidas ${pctMes !== null ? `· <strong>${pctMes}%</strong> de cumplimiento del mes` : ''} · <strong>${pendientesOrdenadas.length}</strong> pendientes acumuladas (incluye meses anteriores)</p>
+      ${pendientesOrdenadas.length ? `
         <div class="ps-table-wrap">
           <table class="ps-table">
-            <thead><tr><th>Tema</th><th>Ubicación</th><th>Tarea</th></tr></thead>
-            <tbody>${pendientes.map(t => `<tr><td>${t.tema||'—'}</td><td>${t.base||'—'}</td><td>${t.descripcion}</td></tr>`).join('')}</tbody>
+            <thead><tr><th>Mes</th><th>Tema</th><th>Ubicación</th><th>Tarea</th></tr></thead>
+            <tbody>${pendientesOrdenadas.map(t => `<tr><td>${mesesNombre[t.mes-1]}</td><td>${t.tema||'—'}</td><td>${t.base||'—'}</td><td>${t.descripcion}</td></tr>`).join('')}</tbody>
           </table>
-        </div>` : (tareas.length ? '<p style="color:var(--ps-muted);font-size:13px;">Todas las tareas programadas están cumplidas.</p>' : '<p style="color:var(--ps-muted);font-size:13px;">No hay tareas programadas en este período.</p>')}
+        </div>` : '<p style="color:var(--ps-muted);font-size:13px;">Sin tareas pendientes acumuladas.</p>'}
     </div>`;
 }
 
@@ -5245,7 +5240,7 @@ function generarInformeMensual() {
   const permisosVencenMes = permisos.filter(p => esDelMes(p.vencimiento, anio, mes));
   const permisosConEstado = permisos.map(p => ({ ...p, estadoCalc: calcularEstadoPermiso(p.vencimiento) }));
   const permisosVigentes = permisosConEstado.filter(p => p.estadoCalc === 'Vigente').length;
-  const permisosVencidosSnapshot = permisosConEstado.filter(p => p.estadoCalc === 'Vencido').length;
+  const permisosVencidosSnapshot = permisosConEstado.filter(p => p.estadoCalc === 'Vencido');
 
   const reqCumplidos = requisitos.filter(r => r.estado === 'Cumplido').length;
   const reqPendientes = requisitos.filter(r => r.estado === 'Pendiente').length;
@@ -5255,6 +5250,8 @@ function generarInformeMensual() {
 
   const idsProgramaDelAnio = new Set(programaMonitoreo.filter(p => p.anio === anio).map(p => p.id));
   const tareasProgramaMes = programaMonitoreoMes.filter(m => idsProgramaDelAnio.has(m.programa_id) && m.mes === (mes+1) && m.descripcion && m.descripcion.trim())
+    .map(m => ({ ...m, ...programaMonitoreo.find(p => p.id === m.programa_id) }));
+  const pendientesProgramaAcumuladas = programaMonitoreoMes.filter(m => idsProgramaDelAnio.has(m.programa_id) && m.mes <= (mes+1) && m.descripcion && m.descripcion.trim() && !m.cumplido)
     .map(m => ({ ...m, ...programaMonitoreo.find(p => p.id === m.programa_id) }));
 
   // --- Render ---
@@ -5288,7 +5285,7 @@ function generarInformeMensual() {
 
     ${seccionManifiestosPendientesInforme(residuosMes.filter(r=>r.estado_manifiesto==='Pendiente'), manifiestosPendientesSnapshot)}
 
-    ${seccionProgramaMonitoreoInforme(tareasProgramaMes)}
+    ${seccionProgramaMonitoreoInforme(tareasProgramaMes, pendientesProgramaAcumuladas)}
 
     <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Monitoreos Ambientales</div>
@@ -5322,6 +5319,13 @@ function generarInformeMensual() {
             <tbody>${notasMes.map(n => `<tr><td>${n.numero}</td><td>${n.organismo}</td><td>${formatFecha(n.recepcion)}</td><td><span class="ps-badge ${badgeClaseEstadoNota(estadoNota(n))}">${estadoNota(n)}</span></td></tr>`).join('')}</tbody>
           </table>
         </div>` : ''}
+      <p style="font-size:12.5px;font-weight:700;margin-top:14px;margin-bottom:8px;">Vencidas sin responder (incluye meses anteriores)</p>
+      <div class="ps-table-wrap">
+        <table class="ps-table">
+          <thead><tr><th>N° Nota</th><th>Organismo</th><th>Recepción</th><th>Fecha límite</th><th>Base</th></tr></thead>
+          <tbody>${filaOVacio([...notasVencidasSnapshot].sort((a,b)=>a.fecha_limite.localeCompare(b.fecha_limite)).map(n => `<tr><td>${n.numero}</td><td>${n.organismo}</td><td>${formatFecha(n.recepcion)}</td><td>${formatFecha(n.fecha_limite)}</td><td>${n.base||'—'}</td></tr>`), 5, 'Sin notas vencidas.')}</tbody>
+        </table>
+      </div>
     </div>
 
     <div class="ps-informe-seccion">
@@ -5335,8 +5339,18 @@ function generarInformeMensual() {
     </div>
 
     <div class="ps-informe-seccion">
+      <div class="ps-informe-seccion-title">Planes de Acción pendientes <span style="font-weight:400;font-size:11px;color:var(--ps-muted);">(todos, sin importar el mes de origen)</span></div>
+      <div class="ps-table-wrap">
+        <table class="ps-table">
+          <thead><tr><th>Origen</th><th>Base</th><th>Hallazgo / Acción</th><th>Responsable</th><th>Estado</th><th>Plazo</th></tr></thead>
+          <tbody>${filaOVacio(planesPendientesSnapshot.sort((a,b) => (a.plazo||'').localeCompare(b.plazo||'')).map(p => `<tr><td>${p.origen}</td><td>${p.base||'—'}</td><td>${p.accion || p.hallazgo || '—'}</td><td>${p.responsable}</td><td><span class="ps-badge ${badgeClaseEstadoPA(p.estado)}">${p.estado}</span></td><td>${p.plazo ? formatFecha(p.plazo) : '—'}</td></tr>`), 6, 'No hay planes de acción pendientes.')}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Permisos, Habilitaciones y Registros (estado a la fecha)</div>
-      <p style="font-size:13px;margin-bottom:10px;"><strong>${permisosVigentes}</strong> vigentes · <strong>${permisosVencidosSnapshot}</strong> vencidos · <strong>${permisosVencenMes.length}</strong> vencen en ${nombresMesesLargos[mes]}</p>
+      <p style="font-size:13px;margin-bottom:10px;"><strong>${permisosVigentes}</strong> vigentes · <strong>${permisosVencidosSnapshot.length}</strong> vencidos · <strong>${permisosVencenMes.length}</strong> vencen en ${nombresMesesLargos[mes]}</p>
       ${permisosVencenMes.length ? `
         <div class="ps-table-wrap">
           <table class="ps-table">
@@ -5344,6 +5358,13 @@ function generarInformeMensual() {
             <tbody>${permisosVencenMes.map(p => `<tr><td>${p.tipo}</td><td>${p.organismo}</td><td>${formatFecha(p.vencimiento)}</td></tr>`).join('')}</tbody>
           </table>
         </div>` : ''}
+      <p style="font-size:12.5px;font-weight:700;margin-top:14px;margin-bottom:8px;">Vencidos sin renovar (incluye meses anteriores)</p>
+      <div class="ps-table-wrap">
+        <table class="ps-table">
+          <thead><tr><th>Tipo</th><th>Organismo</th><th>Vencimiento</th></tr></thead>
+          <tbody>${filaOVacio([...permisosVencidosSnapshot].sort((a,b)=>a.vencimiento.localeCompare(b.vencimiento)).map(p => `<tr><td>${p.tipo}</td><td>${p.organismo}</td><td>${formatFecha(p.vencimiento)}</td></tr>`), 3, 'Sin permisos vencidos.')}</tbody>
+        </table>
+      </div>
     </div>
 
     <div class="ps-informe-seccion">
@@ -5378,7 +5399,7 @@ function generarInformeAnual() {
   const permisosVencenAnio = permisos.filter(p => p.vencimiento && p.vencimiento.startsWith(String(anio)));
   const permisosConEstado = permisos.map(p => ({ ...p, estadoCalc: calcularEstadoPermiso(p.vencimiento) }));
   const permisosVigentes = permisosConEstado.filter(p => p.estadoCalc === 'Vigente').length;
-  const permisosVencidosSnapshot = permisosConEstado.filter(p => p.estadoCalc === 'Vencido').length;
+  const permisosVencidosSnapshot = permisosConEstado.filter(p => p.estadoCalc === 'Vencido');
 
   const reqCumplidos = requisitos.filter(r => r.estado === 'Cumplido').length;
   const reqPendientes = requisitos.filter(r => r.estado === 'Pendiente').length;
@@ -5426,30 +5447,27 @@ function generarInformeAnual() {
 
     <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Manifiestos de Residuos Peligrosos</div>
-      <p style="font-size:13px;margin-bottom:10px;">
+      <p style="font-size:13px;">
         <strong>${manifiestosDelAnio}</strong> movimientos en el año ·
         <strong>${manifiestosCerradosAnio}</strong> con certificado recibido ·
         <strong>${manifiestosPendientesSnapshot.length}</strong> pendientes a la fecha (de cualquier año)
       </p>
-      ${manifiestosPendientesSnapshot.length ? `
-        <div class="ps-table-wrap">
-          <table class="ps-table">
-            <thead><tr><th>Fecha</th><th>Manifiesto</th><th>Transporte</th><th>Operador</th><th>Base</th></tr></thead>
-            <tbody>${manifiestosPendientesSnapshot.slice(0,15).map(r => `<tr><td>${formatFecha(r.fecha)}</td><td>${r.manifiesto||'—'}</td><td>${r.transporte||'—'}</td><td>${r.operador||'—'}</td><td>${r.base||'—'}</td></tr>`).join('')}</tbody>
-          </table>
-        </div>
-        ${manifiestosPendientesSnapshot.length > 15 ? `<p style="font-size:11px;color:var(--ps-muted);margin-top:6px;">Mostrando los primeros 15 de ${manifiestosPendientesSnapshot.length}.</p>` : ''}
-      ` : '<p style="color:var(--ps-muted);font-size:13px;">Sin manifiestos pendientes.</p>'}
     </div>
 
     <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Programa de Monitoreo Anual — ${anio}</div>
-      <p style="font-size:13px;">
+      <p style="font-size:13px;margin-bottom:10px;">
         <strong>${tareasProgramaAnio.length}</strong> tareas programadas en el año ·
         <strong>${cumplidasPrograma}</strong> cumplidas ·
         <strong>${tareasProgramaAnio.length - cumplidasPrograma}</strong> pendientes
         ${pctPrograma !== null ? ` · <strong>${pctPrograma}%</strong> de cumplimiento` : ''}
       </p>
+      <div class="ps-table-wrap">
+        <table class="ps-table">
+          <thead><tr><th>Mes</th><th>Tema</th><th>Ubicación</th><th>Tarea</th></tr></thead>
+          <tbody>${filaOVacio([...tareasProgramaAnio].filter(t=>!t.cumplido).sort((a,b)=>a.mes-b.mes).map(t => `<tr><td>${mesesNombre[t.mes-1]}</td><td>${t.tema||'—'}</td><td>${t.base||'—'}</td><td>${t.descripcion}</td></tr>`), 4, 'Sin tareas pendientes.')}</tbody>
+        </table>
+      </div>
     </div>
 
     <div class="ps-informe-seccion">
@@ -5464,17 +5482,35 @@ function generarInformeAnual() {
 
     <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Notas recibidas de organismos — Totales del año</div>
-      <p style="font-size:13px;"><strong>${notasAnio.length}</strong> recibidas en el año · <strong>${notasRespondidasAnio.length}</strong> respondidas en el año · <strong>${notasVencidasSnapshot.length}</strong> vencidas sin responder (a la fecha, de cualquier año)</p>
+      <p style="font-size:13px;margin-bottom:10px;"><strong>${notasAnio.length}</strong> recibidas en el año · <strong>${notasRespondidasAnio.length}</strong> respondidas en el año · <strong>${notasVencidasSnapshot.length}</strong> vencidas sin responder (a la fecha, de cualquier año)</p>
+      <div class="ps-table-wrap">
+        <table class="ps-table">
+          <thead><tr><th>N° Nota</th><th>Organismo</th><th>Recepción</th><th>Fecha límite</th><th>Base</th></tr></thead>
+          <tbody>${filaOVacio([...notasVencidasSnapshot].sort((a,b)=>a.fecha_limite.localeCompare(b.fecha_limite)).map(n => `<tr><td>${n.numero}</td><td>${n.organismo}</td><td>${formatFecha(n.recepcion)}</td><td>${formatFecha(n.fecha_limite)}</td><td>${n.base||'—'}</td></tr>`), 5, 'Sin notas vencidas.')}</tbody>
+        </table>
+      </div>
     </div>
 
     <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Planes de Acción — Totales del año</div>
-      <p style="font-size:13px;"><strong>${planesCerradosAnio.length}</strong> planes cerrados durante el año · <strong>${planesPendientesSnapshot.length}</strong> siguen pendientes a la fecha</p>
+      <p style="font-size:13px;margin-bottom:10px;"><strong>${planesCerradosAnio.length}</strong> planes cerrados durante el año · <strong>${planesPendientesSnapshot.length}</strong> siguen pendientes a la fecha</p>
+      <div class="ps-table-wrap">
+        <table class="ps-table">
+          <thead><tr><th>Origen</th><th>Base</th><th>Hallazgo / Acción</th><th>Responsable</th><th>Estado</th><th>Plazo</th></tr></thead>
+          <tbody>${filaOVacio(planesPendientesSnapshot.sort((a,b) => (a.plazo||'').localeCompare(b.plazo||'')).map(p => `<tr><td>${p.origen}</td><td>${p.base||'—'}</td><td>${p.accion || p.hallazgo || '—'}</td><td>${p.responsable}</td><td><span class="ps-badge ${badgeClaseEstadoPA(p.estado)}">${p.estado}</span></td><td>${p.plazo ? formatFecha(p.plazo) : '—'}</td></tr>`), 6, 'No hay planes de acción pendientes.')}</tbody>
+        </table>
+      </div>
     </div>
 
     <div class="ps-informe-seccion">
       <div class="ps-informe-seccion-title">Permisos, Habilitaciones y Registros</div>
-      <p style="font-size:13px;"><strong>${permisosVigentes}</strong> vigentes a la fecha · <strong>${permisosVencidosSnapshot}</strong> vencidos a la fecha · <strong>${permisosVencenAnio.length}</strong> vencieron o vencen durante ${anio}</p>
+      <p style="font-size:13px;margin-bottom:10px;"><strong>${permisosVigentes}</strong> vigentes a la fecha · <strong>${permisosVencidosSnapshot.length}</strong> vencidos a la fecha · <strong>${permisosVencenAnio.length}</strong> vencieron o vencen durante ${anio}</p>
+      <div class="ps-table-wrap">
+        <table class="ps-table">
+          <thead><tr><th>Tipo</th><th>Organismo</th><th>Vencimiento</th></tr></thead>
+          <tbody>${filaOVacio([...permisosVencidosSnapshot].sort((a,b)=>a.vencimiento.localeCompare(b.vencimiento)).map(p => `<tr><td>${p.tipo}</td><td>${p.organismo}</td><td>${formatFecha(p.vencimiento)}</td></tr>`), 3, 'Sin permisos vencidos.')}</tbody>
+        </table>
+      </div>
     </div>
 
     <div class="ps-informe-seccion">
