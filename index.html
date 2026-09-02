@@ -242,6 +242,12 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
   #view-requisitos .ps-table { font-size: 10px; min-width: 0; table-layout: auto; }
   #view-requisitos .ps-table th:last-child, #view-requisitos .ps-table td:last-child { display: none; }
   #req-kpis { margin-bottom: 16px; }
+
+  #subvista-residuos-manifiestos .ps-informe-header { display: block !important; }
+  #subvista-residuos-manifiestos .ps-content-card { border: none !important; box-shadow: none !important; padding: 0 !important; }
+  #subvista-residuos-manifiestos .ps-table { font-size: 8.5px; min-width: 0; table-layout: auto; }
+  #subvista-residuos-manifiestos .ps-table th:last-child, #subvista-residuos-manifiestos .ps-table td:last-child { display: none; }
+  #toggle-subvista-residuos, #manif-grafico-wrap { display: none !important; }
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -741,9 +747,18 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
       <div id="subvista-residuos-manifiestos" style="display:none;">
       <!-- CONTROL DE MANIFIESTOS — RESIDUOS PELIGROSOS -->
       <div class="ps-content-card">
-        <div class="ps-content-card-title">
+        <div class="ps-content-card-title ps-no-print">
           Control de Manifiestos — Residuos Peligrosos
-          <button class="ps-btn" style="padding:6px 10px;font-size:11px;" onclick="cambiarVistaGraficoManifiestos()" id="btn-toggle-grafico-manifiestos">📈 Ver evolución por año</button>
+          <div style="display:flex;gap:8px;">
+            <button class="ps-btn" style="padding:6px 10px;font-size:11px;" onclick="exportarManifiestosExcel()">📥 Exportar a Excel</button>
+            <button class="ps-btn ps-btn-accent" style="padding:6px 10px;font-size:11px;" onclick="descargarManifiestosComoApp()">🖨️ Descargar como en la app</button>
+            <button class="ps-btn" style="padding:6px 10px;font-size:11px;" onclick="cambiarVistaGraficoManifiestos()" id="btn-toggle-grafico-manifiestos">📈 Ver evolución por año</button>
+          </div>
+        </div>
+
+        <div class="ps-informe-header" style="display:none;">
+          <h1>Control de Manifiestos — Residuos Peligrosos</h1>
+          <p id="manif-print-fecha"></p>
         </div>
 
         <div id="manif-alerta-pendientes"></div>
@@ -752,7 +767,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <canvas id="chart-manifiestos-anual"></canvas>
         </div>
 
-        <div class="ps-filters">
+        <div class="ps-filters ps-no-print">
           <div class="ps-field">
             <label>Base</label>
             <select class="ps-select" id="filtro-base-manif" onchange="renderControlManifiestos()">
@@ -3439,6 +3454,54 @@ cargarResiduos();
 let vistaGraficoManifiestos = false;
 let chartManifiestosAnualInstance = null;
 
+function descargarManifiestosComoApp() {
+  document.getElementById('manif-print-fecha').textContent = `Generado el ${formatFecha(hoy().toISOString().slice(0,10))}`;
+  window.print();
+}
+
+function exportarManifiestosExcel() {
+  if (typeof XLSX === 'undefined') {
+    alert('No se pudo cargar la librería de Excel. Revisá tu conexión e intentá de nuevo.');
+    return;
+  }
+  const filtrados = obtenerManifiestosFiltrados();
+  if (!filtrados.length) {
+    alert('No hay manifiestos para exportar con los filtros actuales.');
+    return;
+  }
+
+  const filas = filtrados.map(r => ({
+    'N° Movimiento': r.n_movimiento || '',
+    'Año': r.fecha ? r.fecha.slice(0,4) : '',
+    'Fecha': r.fecha ? formatFecha(r.fecha) : '',
+    'Manifiesto N°': r.manifiesto || '',
+    'Transporte': r.transporte || '',
+    'Descripción residuo': r.descripcion_residuo || '',
+    'Cantidad': r.cantidad != null ? Number(r.cantidad) : '',
+    'Unidad': r.unidad || '',
+    'Operador': r.operador || '',
+    'Fecha certificado': r.fecha_certificado ? formatFecha(r.fecha_certificado) : '',
+    'N° Certificado': r.n_certificado || '',
+    'Lugar de generación': r.base || '',
+    'Certificado disposición (SI/NO)': r.certificado_ok || '',
+    'Estado': r.estado_manifiesto === 'Pendiente' ? '⚠️ PENDIENTE' : (r.estado_manifiesto === 'Cumplido' ? '✅ Cumplido' : (r.estado_manifiesto || '')),
+    'Manifiestos adjuntos': _adjCacheManifiestos.filter(a => a.registro_id === r.id).length,
+    'Certificados adjuntos': _adjCacheCertificados.filter(a => a.registro_id === r.id).length,
+  }));
+
+  const hoja = XLSX.utils.json_to_sheet(filas);
+  hoja['!cols'] = [
+    {wch:12},{wch:6},{wch:11},{wch:16},{wch:16},{wch:22},{wch:10},{wch:8},
+    {wch:18},{wch:14},{wch:12},{wch:18},{wch:16},{wch:14},{wch:14},{wch:14},
+  ];
+  // Congela la fila de encabezado (queda fija al scrollear) y agrega el filtro automático de Excel
+  hoja['!freeze'] = { xSplit: 0, ySplit: 1 };
+  hoja['!autofilter'] = { ref: hoja['!ref'] };
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, 'Control de Manifiestos');
+  XLSX.writeFile(libro, `Control_Manifiestos_Peligrosos_${hoy().toISOString().slice(0,10)}.xlsx`);
+}
+
 function cambiarVistaGraficoManifiestos() {
   vistaGraficoManifiestos = !vistaGraficoManifiestos;
   document.getElementById('manif-grafico-wrap').style.display = vistaGraficoManifiestos ? 'block' : 'none';
@@ -3460,21 +3523,26 @@ function poblarFiltrosManifiestos(peligrosos) {
 
 const badgeClaseEstadoManif = e => e === 'Cumplido' ? 'ps-badge-ok' : e === 'Pendiente' ? 'ps-badge-danger' : 'ps-badge-gray-custom';
 
-function renderControlManifiestos() {
+function obtenerManifiestosFiltrados() {
   const peligrosos = residuos.filter(r => r.tipo === 'Peligroso');
-  poblarFiltrosManifiestos(peligrosos);
-
   const bFiltro = document.getElementById('filtro-base-manif').value;
   const aFiltro = document.getElementById('filtro-anio-manif').value;
   const eFiltro = document.getElementById('filtro-estado-manif').value;
   const texto = document.getElementById('filtro-texto-manif').value.toLowerCase();
 
-  const filtrados = peligrosos.filter(r =>
+  return peligrosos.filter(r =>
     (!bFiltro || r.base === bFiltro) &&
     (!aFiltro || r.fecha.startsWith(aFiltro)) &&
     (!eFiltro || r.estado_manifiesto === eFiltro) &&
     (!texto || ((r.manifiesto||'') + (r.operador||'') + (r.transporte||'')).toLowerCase().includes(texto))
   ).sort((a,b) => b.fecha.localeCompare(a.fecha));
+}
+
+function renderControlManifiestos() {
+  const peligrosos = residuos.filter(r => r.tipo === 'Peligroso');
+  poblarFiltrosManifiestos(peligrosos);
+
+  const filtrados = obtenerManifiestosFiltrados();
 
   // Alerta de pendientes (siempre sobre el total, no solo lo filtrado)
   const pendientes = peligrosos.filter(r => r.estado_manifiesto === 'Pendiente');
