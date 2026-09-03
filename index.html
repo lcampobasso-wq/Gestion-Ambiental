@@ -891,6 +891,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
                 <th class="col-estado">Límite</th>
                 <th class="col-responsable">Fecha</th>
                 <th class="col-estado">Resultado</th>
+                <th style="width:90px;">Adjuntos</th>
                 <th style="width:70px;"></th>
               </tr>
             </thead>
@@ -1100,6 +1101,8 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
                 <th class="col-requisito">Hallazgo</th>
                 <th class="col-responsable">Responsable</th>
                 <th class="col-estado">Estado</th>
+                <th style="width:90px;">Adjuntos</th>
+                <th style="width:70px;"></th>
               </tr>
             </thead>
             <tbody id="tbody-auditorias"></tbody>
@@ -3631,17 +3634,26 @@ const GA_TABLA_MONITOREOS = `${GA_SUPABASE_URL}/rest/v1/monitoreos`;
 let monitoreos = [];
 let _monitoreoEditId = null;
 
+let _adjCacheMonitoreos = [];
 async function cargarMonitoreos() {
   const tbody = document.getElementById('tbody-monitoreos');
-  tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando monitoreos...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando monitoreos...</td></tr>`;
   try {
-    const resp = await fetch(`${GA_TABLA_MONITOREOS}?select=*&order=fecha.desc`, { headers: gaHeaders() });
+    const [resp, adj] = await Promise.all([
+      fetch(`${GA_TABLA_MONITOREOS}?select=*&order=fecha.desc`, { headers: gaHeaders() }),
+      cargarAdjuntosDeTipo('monitoreos'),
+    ]);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     monitoreos = await resp.json();
+    _adjCacheMonitoreos = adj;
     renderMonitoreos();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
   }
+}
+async function refrescarAdjuntos_monitoreos() {
+  _adjCacheMonitoreos = await cargarAdjuntosDeTipo('monitoreos');
+  renderMonitoreos();
 }
 
 function poblarFiltroBaseMonitoreo() {
@@ -3683,6 +3695,9 @@ function renderMonitoreos() {
       <td>${m.limite} <span style="color:var(--ps-muted);font-size:11px;">${m.unidad}</span></td>
       <td>${formatFecha(m.fecha)}</td>
       <td><span class="ps-badge ${m.resultado === 'Excede límite' ? 'ps-badge-danger' : 'ps-badge-ok'}">${m.resultado}</span></td>
+      <td>
+        ${botonAdjuntos('monitoreos', m.id, 'monitoreos', _adjCacheMonitoreos)}
+      </td>
       <td style="white-space:nowrap;">
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="editarMonitoreo('${m.id}')" title="Editar">✏️</button>
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="eliminarMonitoreo('${m.id}')" title="Eliminar">🗑️</button>
@@ -4560,17 +4575,26 @@ const GA_TABLA_AUDITORIAS = `${GA_SUPABASE_URL}/rest/v1/auditorias`;
 let auditorias = [];
 let _auditoriaEditId = null;
 
+let _adjCacheAuditorias = [];
 async function cargarAuditorias() {
   const tbody = document.getElementById('tbody-auditorias');
-  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando auditorías...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando auditorías...</td></tr>`;
   try {
-    const resp = await fetch(`${GA_TABLA_AUDITORIAS}?select=*&order=fecha.desc`, { headers: gaHeaders() });
+    const [resp, adj] = await Promise.all([
+      fetch(`${GA_TABLA_AUDITORIAS}?select=*&order=fecha.desc`, { headers: gaHeaders() }),
+      cargarAdjuntosDeTipo('auditorias'),
+    ]);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     auditorias = await resp.json();
+    _adjCacheAuditorias = adj;
     renderAuditorias();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
   }
+}
+async function refrescarAdjuntos_auditorias() {
+  _adjCacheAuditorias = await cargarAdjuntosDeTipo('auditorias');
+  renderAuditorias();
 }
 
 const badgeClaseEstadoAuditoria = e => e === 'Cerrado' ? 'ps-badge-ok' : e === 'En curso' ? 'ps-badge-warn' : 'ps-badge-danger';
@@ -4605,6 +4629,9 @@ function renderAuditorias() {
       <td><span class="ps-td-clamp" title="${a.hallazgo}">${a.hallazgo}</span></td>
       <td><span class="ps-td-1line" title="${a.responsable}">${a.responsable}</span></td>
       <td><span class="ps-badge ${badgeClaseEstadoAuditoria(a.estado)}">${a.estado}</span></td>
+      <td>
+        ${botonAdjuntos('auditorias', a.id, 'auditorias', _adjCacheAuditorias)}
+      </td>
       <td style="white-space:nowrap;">
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="editarAuditoria('${a.id}')" title="Editar">✏️</button>
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="eliminarAuditoria('${a.id}')" title="Eliminar">🗑️</button>
