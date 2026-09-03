@@ -1371,6 +1371,10 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           </select>
         </div>
       </div>
+      <div class="ps-field">
+        <label>Vencimiento (opcional — si lo carga, también aparece en Permisos y Registros)</label>
+        <input class="ps-input" type="date" id="f-vencimiento" style="width:100%;">
+      </div>
       <div style="font-size:11px;color:var(--ps-muted);">La evidencia (archivo) se adjunta desde la tabla, con el ícono 📎 — al hacerlo, el requisito pasa a "Cumplido" automáticamente.</div>
     </div>
     <div class="ps-modal-footer">
@@ -2211,6 +2215,7 @@ async function cargarRequisitos() {
 async function refrescarAdjuntos_requisitos_ambientales() {
   _adjCacheRequisitos = await cargarAdjuntosDeTipo('requisitos_ambientales');
   renderRequisitos();
+  if (typeof renderPermisos === 'function') renderPermisos();
 }
 
 function renderRequisitos() {
@@ -2273,6 +2278,7 @@ function renderRequisitos() {
   empty.style.display = filtrados.length ? 'none' : 'block';
 
   renderKpisRequisitos();
+  if (typeof renderPermisos === 'function') renderPermisos();
   if (typeof renderDashboard === 'function') renderDashboard();
   if (typeof generarInforme === 'function') generarInforme();
 }
@@ -2312,7 +2318,27 @@ function editarRequisito(id) {
   document.getElementById('f-requisito').value = r.requisito;
   document.getElementById('f-responsable').value = r.responsable || '';
   document.getElementById('f-estado').value = r.estado;
+  document.getElementById('f-vencimiento').value = r.vencimiento || '';
   document.getElementById('modal-requisito').classList.add('active');
+}
+
+// Actualiza solo el vencimiento de un requisito (usado desde Permisos, sin abrir el modal completo)
+async function guardarVencimientoRequisito(id, valor) {
+  try {
+    const resp = await fetch(`${GA_TABLA_REQUISITOS}?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+      body: JSON.stringify({ vencimiento: valor || null }),
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const [actualizado] = await resp.json();
+    const idx = requisitos.findIndex(x => x.id === id);
+    if (idx !== -1) requisitos[idx] = actualizado;
+    if (typeof renderPermisos === 'function') renderPermisos();
+    if (typeof renderRequisitos === 'function') renderRequisitos();
+  } catch (err) {
+    alert('No se pudo guardar el vencimiento: ' + err.message);
+  }
 }
 
 async function eliminarRequisito(id) {
@@ -2368,7 +2394,7 @@ async function cerrarPlanVinculado(campoVinculo, valorId) {
 
 function cerrarModalRequisito() {
   document.getElementById('modal-requisito').classList.remove('active');
-  ['f-norma','f-alcance','f-requisito','f-responsable'].forEach(id => document.getElementById(id).value = '');
+  ['f-norma','f-alcance','f-requisito','f-responsable','f-vencimiento'].forEach(id => document.getElementById(id).value = '');
   _requisitoEditId = null;
 }
 
@@ -2388,6 +2414,7 @@ async function guardarRequisito() {
     requisito,
     responsable: document.getElementById('f-responsable').value.trim() || '—',
     estado: document.getElementById('f-estado').value,
+    vencimiento: document.getElementById('f-vencimiento').value || null,
   };
 
   // No se puede marcar "Cumplido" sin evidencia adjunta, salvo los requisitos Referenciales
@@ -2471,6 +2498,17 @@ const GA_TABLA_PERMISOS = `${GA_SUPABASE_URL}/rest/v1/permisos_ambientales`;
 
 function hoy() { return new Date(new Date().toDateString()); }
 
+// Peso de una tarea del Programa de Monitoreo para calcular %: Cumplida = 1, En curso (según su
+// Plan de Acción vinculado) = 0.5, el resto = 0. Se usa en todos los % de cumplimiento del programa.
+function pesoTareaPrograma(m) {
+  if (m.cumplido) return 1;
+  if (typeof planesAccion !== 'undefined') {
+    const plan = planesAccion.find(p => p.programa_mes_id === m.id);
+    if (plan && plan.estado === 'En curso') return 0.5;
+  }
+  return 0;
+}
+
 function calcularEstadoPermiso(fechaVencimiento) {
   const venc = new Date(fechaVencimiento);
   const dias = Math.ceil((venc - hoy()) / (1000 * 60 * 60 * 24));
@@ -2521,7 +2559,17 @@ function renderPermisos() {
   const eFiltro = document.getElementById('filtro-estado-permiso').value;
   const texto = document.getElementById('filtro-texto-permiso').value.toLowerCase();
 
-  const conEstado = permisos.map(p => ({ ...p, estadoCalc: calcularEstadoPermiso(p.vencimiento) }));
+  const permisosReales = permisos.map(p => ({ ...p, estadoCalc: calcularEstadoPermiso(p.vencimiento), _origen: 'permiso' }));
+
+  // Requisitos que tienen vencimiento cargado se suman acá, sin duplicar la carga (se editan en un solo lugar cada uno)
+  const requisitosConVenc = requisitos
+    .filter(r => r.vencimiento)
+    .map(r => ({
+      id: r.id, tipo: r.norma, organismo: r.jurisdiccion, emision: null, vencimiento: r.vencimiento,
+      estadoCalc: calcularEstadoPermiso(r.vencimiento), _origen: 'requisito', _alcance: r.alcance,
+    }));
+
+  const conEstado = [...permisosReales, ...requisitosConVenc];
 
   const filtrados = conEstado.filter(p =>
     (!tFiltro || p.tipo === tFiltro) &&
@@ -2531,7 +2579,24 @@ function renderPermisos() {
 
   const tbody = document.getElementById('tbody-permisos');
   const empty = document.getElementById('perm-empty');
-  tbody.innerHTML = filtrados.map(p => `
+  tbody.innerHTML = filtrados.map(p => {
+    if (p._origen === 'requisito') {
+      return `
+    <tr style="background:#fbfaf7;">
+      <td><span class="ps-td-1line" title="${p.tipo}"><strong>${p.tipo}</strong></span> <span class="ps-badge-juris" style="margin-left:4px;">Desde Requisitos</span></td>
+      <td><span class="ps-td-clamp" title="${p._alcance||p.organismo}">${p._alcance || p.organismo}</span></td>
+      <td>—</td>
+      <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${p.vencimiento}" onchange="guardarVencimientoRequisito('${p.id}', this.value)"></td>
+      <td><span class="ps-badge ${badgeClaseEstadoPermiso(p.estadoCalc)}">${p.estadoCalc}</span></td>
+      <td>
+        ${botonAdjuntos('requisitos_ambientales', p.id, 'requisitos', _adjCacheRequisitos)}
+      </td>
+      <td style="white-space:nowrap;">
+        <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="guardarVencimientoRequisito('${p.id}', null)" title="Quitar vencimiento (no borra el requisito)">🗑️</button>
+      </td>
+    </tr>`;
+    }
+    return `
     <tr>
       <td><span class="ps-td-1line" title="${p.tipo}"><strong>${p.tipo}</strong></span></td>
       <td><span class="ps-td-clamp" title="${p.organismo}">${p.organismo}</span></td>
@@ -2545,8 +2610,8 @@ function renderPermisos() {
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="editarPermiso('${p.id}')" title="Editar">✏️</button>
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="eliminarPermiso('${p.id}')" title="Eliminar">🗑️</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 
   tbody.closest('.ps-table-wrap').style.display = filtrados.length ? '' : 'none';
   empty.style.display = filtrados.length ? 'none' : 'block';
@@ -3896,7 +3961,8 @@ function renderProgramaMonitoreo() {
     const meses = programaMonitoreoMes.filter(m => m.programa_id === p.id).sort((a,b) => a.mes - b.mes);
     const programados = meses.filter(m => m.descripcion && m.descripcion.trim());
     const cumplidos = programados.filter(m => m.cumplido);
-    const pct = programados.length ? Math.round((cumplidos.length / programados.length) * 100) : null;
+    const pesoTotal = programados.reduce((s, m) => s + pesoTareaPrograma(m), 0);
+    const pct = programados.length ? Math.round((pesoTotal / programados.length) * 100) : null;
 
     const celdasMeses = [];
     for (let mesNum = 1; mesNum <= 12; mesNum++) {
@@ -3931,13 +3997,14 @@ function renderProgramaMonitoreo() {
 }
 
 function renderKpisPrograma(items) {
-  let totalProgramados = 0, totalCumplidos = 0;
+  let totalProgramados = 0, totalCumplidos = 0, pesoTotalGeneral = 0;
   items.forEach(p => {
     const meses = programaMonitoreoMes.filter(m => m.programa_id === p.id && m.descripcion && m.descripcion.trim());
     totalProgramados += meses.length;
     totalCumplidos += meses.filter(m => m.cumplido).length;
+    pesoTotalGeneral += meses.reduce((s, m) => s + pesoTareaPrograma(m), 0);
   });
-  const pctGeneral = totalProgramados ? Math.round((totalCumplidos / totalProgramados) * 100) : 0;
+  const pctGeneral = totalProgramados ? Math.round((pesoTotalGeneral / totalProgramados) * 100) : 0;
 
   document.getElementById('prog-kpis').innerHTML = `
     <div class="ps-mini-kpi"><div class="ps-mini-kpi-value" style="color:var(--ps-text);">${items.length}</div><div class="ps-mini-kpi-label">Ítems del programa</div></div>
@@ -5480,7 +5547,8 @@ function seccionManifiestosPendientesInforme(pendientesDelPeriodo, pendientesSna
 
 function seccionProgramaMonitoreoInforme(tareasDelMes, pendientesAcumuladas) {
   const cumplidasMes = tareasDelMes.filter(t => t.cumplido);
-  const pctMes = tareasDelMes.length ? Math.round((cumplidasMes.length / tareasDelMes.length) * 100) : null;
+  const pesoMes = tareasDelMes.reduce((s, t) => s + pesoTareaPrograma(t), 0);
+  const pctMes = tareasDelMes.length ? Math.round((pesoMes / tareasDelMes.length) * 100) : null;
   const pendientesOrdenadas = [...pendientesAcumuladas].sort((a,b) => a.mes - b.mes);
   return `
     <div class="ps-informe-seccion">
@@ -5697,7 +5765,8 @@ function generarInformeAnual() {
   const tareasProgramaAnio = programaMonitoreoMes.filter(m => idsProgramaDelAnio.has(m.programa_id) && m.descripcion && m.descripcion.trim())
     .map(m => ({ ...m, ...programaMonitoreo.find(p => p.id === m.programa_id) }));
   const cumplidasPrograma = tareasProgramaAnio.filter(t => t.cumplido).length;
-  const pctPrograma = tareasProgramaAnio.length ? Math.round((cumplidasPrograma / tareasProgramaAnio.length) * 100) : null;
+  const pesoAnioPrograma = tareasProgramaAnio.reduce((s, t) => s + pesoTareaPrograma(t), 0);
+  const pctPrograma = tareasProgramaAnio.length ? Math.round((pesoAnioPrograma / tareasProgramaAnio.length) * 100) : null;
 
   document.getElementById('informe-contenido').innerHTML = `
     <div class="ps-informe-header">
@@ -6100,7 +6169,8 @@ function renderDashboard() {
         elAnual.textContent = '—';
       } else {
         const cumplidosAnual = transcurridoConTarea.filter(m => m.cumplido).length;
-        const pctAnual = Math.round((cumplidosAnual / transcurridoConTarea.length) * 100);
+        const pesoAnual = transcurridoConTarea.reduce((s, m) => s + pesoTareaPrograma(m), 0);
+        const pctAnual = Math.round((pesoAnual / transcurridoConTarea.length) * 100);
         elAnual.textContent = pctAnual + '%';
       }
     }
