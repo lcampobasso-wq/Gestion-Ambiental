@@ -314,12 +314,6 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <div class="ps-card-sub">Requisitos al día</div>
         </div>
         <div class="ps-card">
-          <div class="ps-card-icon ps-icon-orange">⏳</div>
-          <div class="ps-card-label">Por vencer</div>
-          <div class="ps-card-value" id="dash-porvencer-value">—</div>
-          <div class="ps-card-sub">Permisos, habilitaciones y registros</div>
-        </div>
-        <div class="ps-card">
           <div class="ps-card-icon ps-icon-red">✉️</div>
           <div class="ps-card-label">Notas sin responder</div>
           <div class="ps-card-value" id="dash-notas-value">—</div>
@@ -339,6 +333,16 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <div class="ps-card-label">Programa de Monitoreo Anual</div>
           <div class="ps-card-value" id="dash-programa-anual-value">—%</div>
           <div class="ps-card-sub">Cumplimiento acumulado del año</div>
+        </div>
+        <div class="ps-card">
+          <div class="ps-card-icon ps-icon-blue">🪪</div>
+          <div class="ps-card-label">Permisos, Habilitaciones y Registros</div>
+          <div style="display:flex;gap:5px;justify-content:center;margin-bottom:6px;flex-wrap:wrap;">
+            <span id="dash-permisos-vigentes" style="background:#c6f6d5;color:#276749;padding:4px 9px;border-radius:20px;font-weight:800;font-size:13px;">—</span>
+            <span id="dash-permisos-porvencer" style="background:#fef3c7;color:#92400e;padding:4px 9px;border-radius:20px;font-weight:800;font-size:13px;">—</span>
+            <span id="dash-permisos-vencidos" style="background:#fed7d7;color:#9b2c2c;padding:4px 9px;border-radius:20px;font-weight:800;font-size:13px;">—</span>
+          </div>
+          <div class="ps-card-sub">🟢 Vigentes · 🟡 Por vencer · 🔴 Vencidos</div>
         </div>
       </div>
 
@@ -5803,7 +5807,16 @@ function renderDashboard() {
   if (typeof permisos !== 'undefined') {
     const conEstado = permisos.map(p => ({ ...p, estadoCalc: calcularEstadoPermiso(p.vencimiento) }));
     const porVencer = conEstado.filter(p => p.estadoCalc === 'Por vencer').length;
-    document.getElementById('dash-porvencer-value').textContent = porVencer;
+
+    // Semáforo Vigentes / Por vencer / Vencidos
+    const vigentesCount = conEstado.filter(p => p.estadoCalc === 'Vigente').length;
+    const vencidosCount = conEstado.filter(p => p.estadoCalc === 'Vencido').length;
+    const elVig = document.getElementById('dash-permisos-vigentes');
+    const elPV = document.getElementById('dash-permisos-porvencer');
+    const elVen = document.getElementById('dash-permisos-vencidos');
+    if (elVig) elVig.textContent = `🟢 ${vigentesCount}`;
+    if (elPV) elPV.textContent = `🟡 ${porVencer}`;
+    if (elVen) elVen.textContent = `🔴 ${vencidosCount}`;
 
     const en6Meses = new Date(hoy());
     en6Meses.setMonth(en6Meses.getMonth() + 6);
