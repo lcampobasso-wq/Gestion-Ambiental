@@ -352,7 +352,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <div id="dash-vencimientos"></div>
         </div>
         <div class="ps-content-card">
-          <div class="ps-content-card-title">Seguimiento de planes de acción</div>
+          <div class="ps-content-card-title" data-titulo-planes>Seguimiento de planes de acción</div>
           <div id="dash-planes-accion"></div>
         </div>
         <div class="ps-content-card">
@@ -2203,6 +2203,7 @@ async function cargarRequisitos() {
     requisitos = await resp.json();
     _adjCacheRequisitos = adj;
     renderRequisitos();
+    if (typeof sincronizarPlanesDeRequisitos === 'function') sincronizarPlanesDeRequisitos();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#9b2c2c;padding:20px;">No se pudo conectar con la base de datos (${err.message}). Revisá la conexión y volvé a intentar.</td></tr>`;
   }
@@ -2345,8 +2346,24 @@ async function marcarCumplidoPorAdjuntoRequisito(id) {
       const [actualizado] = await resp.json();
       Object.assign(r, actualizado);
       renderRequisitos();
+      if (typeof cerrarPlanVinculado === 'function') cerrarPlanVinculado('requisito_id', id);
     }
   } catch (err) { /* si falla, el requisito queda como estaba; no es crítico */ }
+}
+
+// Cierra el Plan de Acción vinculado a cualquier origen (requisito_id, programa_mes_id, etc.)
+// cuando el registro de origen se marca como cumplido/resuelto por su propio lado.
+async function cerrarPlanVinculado(campoVinculo, valorId) {
+  const plan = planesAccion.find(p => p[campoVinculo] === valorId);
+  if (!plan || plan.estado === 'Cumplido') return;
+  try {
+    const resp = await fetch(`${GA_TABLA_PLANES}?id=eq.${plan.id}`, {
+      method: 'PATCH',
+      headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+      body: JSON.stringify({ estado: 'Cumplido', fecha_cumplido: hoy().toISOString().slice(0,10) }),
+    });
+    if (resp.ok) { const [act] = await resp.json(); Object.assign(plan, act); renderPlanesAccion(); }
+  } catch (err) { /* no bloquea el flujo principal si esto falla */ }
 }
 
 function cerrarModalRequisito() {
@@ -2392,6 +2409,7 @@ async function guardarRequisito() {
       const [actualizado] = await resp.json();
       const idx = requisitos.findIndex(x => x.id === _requisitoEditId);
       if (idx !== -1) requisitos[idx] = actualizado;
+      if (actualizado.estado === 'Cumplido' && typeof cerrarPlanVinculado === 'function') cerrarPlanVinculado('requisito_id', actualizado.id);
     } else {
       const resp = await fetch(GA_TABLA_REQUISITOS, {
         method: 'POST',
@@ -4161,14 +4179,19 @@ async function guardarProgramaMes() {
   let cumplido = document.getElementById('pm-cumplido').value === 'true';
   let fechaCumplido = document.getElementById('pm-fecha-cumplido').value || null;
 
-  // No se puede marcar cumplido sin el informe adjunto — si intenta, queda "En curso"
-  // y el Plan de Acción vinculado pasa a pedir que se reclame el resultado.
+  // No se puede marcar cumplido sin el informe adjunto — acá o en el Plan de Acción vinculado
+  // (si ya lo subieron ahí, no hace falta subirlo de nuevo). Si no hay evidencia en ningún lado,
+  // queda "En curso" y el Plan de Acción vinculado pasa a pedir que se reclame el resultado.
   let bloqueadoPorFaltaEvidencia = false;
   if (cumplido) {
     let tieneEvidencia = false;
     try {
       const respAdj = await fetch(`${GA_TABLA_ADJUNTOS}?select=id&tabla=eq.programa_monitoreo_mes&registro_id=eq.${_programaMesActualId}&limit=1`, { headers: gaHeaders() });
       if (respAdj.ok) tieneEvidencia = (await respAdj.json()).length > 0;
+      if (!tieneEvidencia) {
+        const planVinculado = planesAccion.find(p => p.programa_mes_id === _programaMesActualId);
+        if (planVinculado) tieneEvidencia = _adjCachePlanes.some(a => a.registro_id === planVinculado.id);
+      }
     } catch (e) { /* si falla la verificación, seguimos como si no tuviera evidencia (más seguro) */ }
 
     if (!tieneEvidencia) {
@@ -4265,6 +4288,29 @@ async function sincronizarPlanesDeMonitoreo() {
         method: 'POST',
         headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
         body: JSON.stringify({ origen: 'Monitoreo', programa_mes_id: m.id, base: p.base, hallazgo: m.descripcion, accion: '', responsable: p.responsable || '—', estado: 'Pendiente' }),
+      });
+      if (resp.ok) { const [nuevo] = await resp.json(); planesAccion.push(nuevo); }
+    } catch (err) { /* si falla uno, seguimos con el resto */ }
+  }
+  renderPlanesAccion();
+}
+
+// Crea un Plan de Acción por cada Requisito "Aplica" (no Referencial) que esté Pendiente o Vencido
+// y todavía no tenga evidencia/plan vinculado. Se arrastra mientras no se adjunte la evidencia.
+async function sincronizarPlanesDeRequisitos() {
+  if (!_planesAccionCargados || !requisitos.length) return;
+  const pendientesSinPlan = requisitos.filter(r =>
+    r.tipo !== 'Referencial' && r.estado !== 'Cumplido' &&
+    !planesAccion.some(p => p.requisito_id === r.id)
+  );
+  if (!pendientesSinPlan.length) return;
+
+  for (const r of pendientesSinPlan) {
+    try {
+      const resp = await fetch(GA_TABLA_PLANES, {
+        method: 'POST',
+        headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+        body: JSON.stringify({ origen: 'Requisito', requisito_id: r.id, base: r.jurisdiccion, hallazgo: `${r.norma} — ${r.requisito}`, accion: '', responsable: r.responsable || '—', estado: 'Pendiente' }),
       });
       if (resp.ok) { const [nuevo] = await resp.json(); planesAccion.push(nuevo); }
     } catch (err) { /* si falla uno, seguimos con el resto */ }
@@ -4659,6 +4705,7 @@ async function cargarPlanesAccion() {
     _planesAccionCargados = true;
     renderPlanesAccion();
     if (typeof sincronizarPlanesDeMonitoreo === 'function') sincronizarPlanesDeMonitoreo();
+    if (typeof sincronizarPlanesDeRequisitos === 'function') sincronizarPlanesDeRequisitos();
   } catch (err) {
     const tbody = document.getElementById('tbody-planes-accion');
     if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
@@ -4962,7 +5009,9 @@ function renderPlanesAccion() {
 function renderDashPlanesAccion() {
   const cont = document.getElementById('dash-planes-accion');
   if (!cont) return;
-  const activos = planesAccion.filter(p => p.estado !== 'Cumplido').slice(0, 4);
+  const activos = planesAccion.filter(p => p.estado !== 'Cumplido');
+  const tituloEl = document.querySelector('#view-dashboard .ps-content-card-title[data-titulo-planes]');
+  if (tituloEl) tituloEl.textContent = `Seguimiento de planes de acción (${activos.length})`;
   if (!activos.length) {
     cont.innerHTML = `
       <div class="ps-empty">
@@ -4973,7 +5022,7 @@ function renderDashPlanesAccion() {
     return;
   }
   cont.innerHTML = `
-    <div class="ps-table-wrap">
+    <div class="ps-table-wrap" style="max-height:280px;overflow-y:auto;">
       <table class="ps-table">
         <thead><tr><th class="col-juris">Origen</th><th class="col-requisito">Acción / hallazgo</th><th class="col-responsable">Responsable</th><th class="col-estado">Estado</th></tr></thead>
         <tbody>
@@ -5068,11 +5117,47 @@ async function actualizarPlazoPA(id, valor) {
 }
 
 // Marca el plan como Cumplido y, si viene de una auditoría o nota, cierra el origen
+// Busca si hay evidencia adjunta, ya sea en el propio Plan de Acción o en el registro de origen
+// (Programa Anual / Auditoría / Nota) — así no hace falta adjuntar el mismo archivo dos veces.
+async function planTieneEvidencia(plan) {
+  if (_adjCachePlanes.some(a => a.registro_id === plan.id)) return true;
+
+  let tabla = null, registroId = null;
+  if (plan.origen === 'Monitoreo' && plan.programa_mes_id) {
+    tabla = 'programa_monitoreo_mes'; registroId = plan.programa_mes_id;
+  } else if (plan.origen === 'Auditoría' && plan.auditoria_id) {
+    tabla = 'auditorias'; registroId = plan.auditoria_id;
+  } else if (plan.origen === 'Nota' && plan.nota_id) {
+    tabla = 'notas_respuesta'; registroId = plan.nota_id;
+  } else if (plan.origen === 'Requisito' && plan.requisito_id) {
+    tabla = 'requisitos_ambientales'; registroId = plan.requisito_id;
+  }
+  if (!tabla) return false;
+
+  try {
+    const resp = await fetch(`${GA_TABLA_ADJUNTOS}?select=id&tabla=eq.${tabla}&registro_id=eq.${registroId}&limit=1`, { headers: gaHeaders() });
+    if (!resp.ok) return false;
+    return (await resp.json()).length > 0;
+  } catch (err) {
+    return false;
+  }
+}
+
 async function marcarCumplidoPA(id) {
   const plan = planesAccion.find(p => p.id === id);
   if (!plan) return;
   if (!plan.accion) {
     alert('Definí la acción correctiva antes de marcarlo como cumplido.');
+    return;
+  }
+  const tieneEvidencia = await planTieneEvidencia(plan);
+  if (!tieneEvidencia) {
+    const lugar = plan.origen === 'Monitoreo' ? 'la tarea correspondiente en Programa Anual de Monitoreos'
+      : plan.origen === 'Auditoría' ? 'la auditoría de origen'
+      : plan.origen === 'Nota' ? 'la respuesta de la nota de origen'
+      : plan.origen === 'Requisito' ? 'el requisito de origen, en Matriz de Requisitos'
+      : 'este plan (ícono 📎 en la fila)';
+    alert(`No se puede marcar como cumplido sin evidencia adjunta. Adjuntala en ${lugar} y volvé a intentar.`);
     return;
   }
   const fechaCumplido = hoy().toISOString().slice(0, 10);
