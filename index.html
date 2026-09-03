@@ -1320,7 +1320,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
 
       <div class="ps-table-wrap">
         <table class="ps-table">
-          <thead><tr><th>N°</th><th>Base</th><th>Emisión</th><th>Vencimiento</th><th>Estado</th><th>Archivo</th><th style="width:50px;"></th></tr></thead>
+          <thead><tr><th>N°</th><th>Base</th><th>Tipo</th><th>Emisión</th><th>Vencimiento</th><th>Estado</th><th>Archivo</th><th style="width:50px;"></th></tr></thead>
           <tbody id="tbody-vigencias"></tbody>
         </table>
       </div>
@@ -1347,6 +1347,11 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <input class="ps-input" type="date" id="vig-vencimiento">
         </div>
       </div>
+      <div class="ps-field">
+        <label>¿A qué corresponde este vencimiento? (opcional — ej: Hermeticidad, Superficie)</label>
+        <input class="ps-input" id="vig-tipo" placeholder="Dejalo vacío si el certificado tiene un solo vencimiento" style="width:100%;">
+      </div>
+      <div style="font-size:11px;color:var(--ps-muted);">Si el certificado tiene más de un vencimiento (ej: Hermeticidad y Superficie), cargá una vigencia por cada uno — mismo N° de certificado, mismo archivo, pero con su propia fecha y tipo.</div>
       <button class="ps-btn ps-btn-primary" style="align-self:flex-start;" onclick="guardarVigencia()">+ Guardar vigencia</button>
     </div>
     <div class="ps-modal-footer">
@@ -2412,7 +2417,7 @@ function abrirModalVigencias(requisitoId) {
   if (!r) return;
   _vigenciasRequisitoActualId = requisitoId;
   document.getElementById('vig-modal-titulo').textContent = `Vigencias — ${r.norma}`;
-  ['vig-numero','vig-base','vig-emision','vig-vencimiento'].forEach(id => document.getElementById(id).value = '');
+  ['vig-numero','vig-base','vig-emision','vig-vencimiento','vig-tipo'].forEach(id => document.getElementById(id).value = '');
   renderListaVigencias();
   document.getElementById('modal-vigencias').classList.add('active');
 }
@@ -2430,6 +2435,7 @@ function renderListaVigencias() {
     <tr>
       <td><input class="ps-input" style="min-width:70px;padding:4px 6px;font-size:12px;" value="${v.numero||''}" onchange="guardarCampoVigencia('${v.id}','numero',this.value)"></td>
       <td><input class="ps-input" style="min-width:80px;padding:4px 6px;font-size:12px;" value="${v.base||''}" onchange="guardarCampoVigencia('${v.id}','base',this.value)"></td>
+      <td><input class="ps-input" style="min-width:80px;padding:4px 6px;font-size:12px;" value="${v.tipo_vencimiento||''}" placeholder="Ej: Hermeticidad" onchange="guardarCampoVigencia('${v.id}','tipo_vencimiento',this.value)"></td>
       <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${v.fecha_emision||''}" onchange="guardarCampoVigencia('${v.id}','fecha_emision',this.value)"></td>
       <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${v.fecha_vencimiento}" onchange="guardarCampoVigencia('${v.id}','fecha_vencimiento',this.value)"></td>
       <td><span class="ps-badge ${badgeClaseEstadoPermiso(calcularEstadoPermiso(v.fecha_vencimiento))}">${calcularEstadoPermiso(v.fecha_vencimiento)}</span></td>
@@ -2452,6 +2458,7 @@ async function guardarVigencia() {
     base: document.getElementById('vig-base').value.trim() || null,
     fecha_emision: document.getElementById('vig-emision').value || null,
     fecha_vencimiento: vencimiento,
+    tipo_vencimiento: document.getElementById('vig-tipo').value.trim() || null,
   };
   try {
     const resp = await fetch(GA_TABLA_VIGENCIAS, {
@@ -2462,7 +2469,7 @@ async function guardarVigencia() {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const [nueva] = await resp.json();
     requisitoVigencias.push(nueva);
-    ['vig-numero','vig-base','vig-emision','vig-vencimiento'].forEach(id => document.getElementById(id).value = '');
+    ['vig-numero','vig-base','vig-emision','vig-vencimiento','vig-tipo'].forEach(id => document.getElementById(id).value = '');
     renderListaVigencias();
     if (typeof renderPermisos === 'function') renderPermisos();
   } catch (err) {
@@ -2708,8 +2715,9 @@ function renderPermisos() {
     const r = requisitos.find(x => x.id === v.requisito_id);
     if (!r) return null;
     const nombreBase = r.nombre_permiso || r.norma;
+    const detalle = [v.numero ? `N° ${v.numero}` : null, v.tipo_vencimiento || null].filter(Boolean).join(' — ');
     return {
-      id: v.id, tipo: v.numero ? `${nombreBase} (N° ${v.numero})` : nombreBase,
+      id: v.id, tipo: detalle ? `${nombreBase} (${detalle})` : nombreBase,
       organismo: v.base || r.jurisdiccion, emision: v.fecha_emision, vencimiento: v.fecha_vencimiento,
       estadoCalc: calcularEstadoPermiso(v.fecha_vencimiento), _origen: 'requisito', _alcance: r.alcance, _norma: r.norma,
     };
