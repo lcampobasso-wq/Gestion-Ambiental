@@ -4057,7 +4057,6 @@ async function eliminarMonitoreo(id) {
 }
 
 cargarMonitoreos();
-cargarProgramaMonitoreo();
 
 /* ══════════════ PROGRAMA ANUAL DE MONITOREOS ══════════════ */
 const GA_TABLA_PROGRAMA = `${GA_SUPABASE_URL}/rest/v1/programa_monitoreo`;
@@ -4600,6 +4599,8 @@ async function eliminarAdjuntoProgramaMesInline(id, mesId) {
     alert('No se pudo eliminar: ' + err.message);
   }
 }
+
+cargarProgramaMonitoreo();
 
 
 /* ══════════════ CONSUMO DE AGUA (conectado a Supabase) ══════════════ */
