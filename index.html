@@ -322,11 +322,12 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
         <div class="ps-card">
           <div class="ps-card-icon ps-icon-blue">🚦</div>
           <div class="ps-card-label">Monitoreos del mes</div>
-          <div style="display:flex;gap:6px;justify-content:center;margin-bottom:6px;">
-            <span id="dash-monitoreos-cumplidos" style="background:#c6f6d5;color:#276749;padding:4px 11px;border-radius:20px;font-weight:800;font-size:15px;">—</span>
-            <span id="dash-monitoreos-pendientes" style="background:#fed7d7;color:#9b2c2c;padding:4px 11px;border-radius:20px;font-weight:800;font-size:15px;">—</span>
+          <div style="display:flex;gap:5px;justify-content:center;margin-bottom:6px;flex-wrap:wrap;">
+            <span id="dash-monitoreos-cumplidos" style="background:#c6f6d5;color:#276749;padding:4px 9px;border-radius:20px;font-weight:800;font-size:13px;">—</span>
+            <span id="dash-monitoreos-encurso" style="background:#fef3c7;color:#92400e;padding:4px 9px;border-radius:20px;font-weight:800;font-size:13px;">—</span>
+            <span id="dash-monitoreos-pendientes" style="background:#fed7d7;color:#9b2c2c;padding:4px 9px;border-radius:20px;font-weight:800;font-size:13px;">—</span>
           </div>
-          <div class="ps-card-sub">✅ Cumplidos este mes · ⏳ Pendientes acumuladas</div>
+          <div class="ps-card-sub">✅ Cumplidas · 🔧 En curso · ⏳ Pendientes (acum.)</div>
         </div>
         <div class="ps-card">
           <div class="ps-card-icon ps-icon-purple">📅</div>
@@ -835,11 +836,11 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
     <div class="ps-view" id="view-monitoreos">
 
       <div id="toggle-subvista-monitoreos" style="display:flex;border:1.5px solid var(--ps-border);border-radius:var(--ps-radius-md);overflow:hidden;width:fit-content;margin-bottom:16px;">
-        <button class="ps-view-toggle active" data-subvista="mediciones" onclick="cambiarSubvistaMonitoreos('mediciones')">Mediciones</button>
-        <button class="ps-view-toggle" data-subvista="programa" onclick="cambiarSubvistaMonitoreos('programa')">Programa Anual</button>
+        <button class="ps-view-toggle active" data-subvista="programa" onclick="cambiarSubvistaMonitoreos('programa')">Programa Anual</button>
+        <button class="ps-view-toggle" data-subvista="mediciones" onclick="cambiarSubvistaMonitoreos('mediciones')">Mediciones</button>
       </div>
 
-      <div id="subvista-monitoreos-mediciones">
+      <div id="subvista-monitoreos-mediciones" style="display:none;">
 
       <div class="ps-mini-kpi-row" id="mon-kpis"></div>
 
@@ -908,7 +909,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
       </div>
       <!-- fin subvista-monitoreos-mediciones -->
 
-      <div id="subvista-monitoreos-programa" style="display:none;">
+      <div id="subvista-monitoreos-programa">
 
       <div class="ps-mini-kpi-row" id="prog-kpis"></div>
 
@@ -2703,14 +2704,11 @@ async function refrescarAdjuntos_permisos_ambientales() {
   renderPermisos();
 }
 
-function renderPermisos() {
-  const tFiltro = document.getElementById('filtro-tipo-permiso').value;
-  const eFiltro = document.getElementById('filtro-estado-permiso').value;
-  const texto = document.getElementById('filtro-texto-permiso').value.toLowerCase();
-
+// Combina permisos reales + vigencias de requisitos con vencimiento (usado por Permisos Y por el Dashboard,
+// para que ambos cuenten siempre exactamente lo mismo).
+function obtenerPermisosCombinados() {
   const permisosReales = permisos.map(p => ({ ...p, estadoCalc: calcularEstadoPermiso(p.vencimiento), _origen: 'permiso' }));
 
-  // Requisitos que tienen vencimiento cargado se suman acá, sin duplicar la carga (se editan en un solo lugar cada uno)
   const requisitosConVenc = requisitoVigencias.map(v => {
     const r = requisitos.find(x => x.id === v.requisito_id);
     if (!r) return null;
@@ -2723,7 +2721,15 @@ function renderPermisos() {
     };
   }).filter(Boolean);
 
-  const conEstado = [...permisosReales, ...requisitosConVenc];
+  return [...permisosReales, ...requisitosConVenc];
+}
+
+function renderPermisos() {
+  const tFiltro = document.getElementById('filtro-tipo-permiso').value;
+  const eFiltro = document.getElementById('filtro-estado-permiso').value;
+  const texto = document.getElementById('filtro-texto-permiso').value.toLowerCase();
+
+  const conEstado = obtenerPermisosCombinados();
 
   const filtrados = conEstado.filter(p =>
     (!tFiltro || p.tipo === tFiltro) &&
@@ -6242,8 +6248,8 @@ function renderDashboard() {
   }
 
   // Permisos por vencer (30 días) + lista de próximos vencimientos (6 meses)
-  if (typeof permisos !== 'undefined') {
-    const conEstado = permisos.map(p => ({ ...p, estadoCalc: calcularEstadoPermiso(p.vencimiento) }));
+  if (typeof permisos !== 'undefined' && typeof obtenerPermisosCombinados === 'function') {
+    const conEstado = obtenerPermisosCombinados();
     const porVencer = conEstado.filter(p => p.estadoCalc === 'Por vencer').length;
 
     // Semáforo Vigentes / Por vencer / Vencidos
@@ -6258,8 +6264,8 @@ function renderDashboard() {
 
     const en6Meses = new Date(hoy());
     en6Meses.setMonth(en6Meses.getMonth() + 6);
-    const proximos = permisos
-      .filter(p => new Date(p.vencimiento) <= en6Meses) // incluye vencidos (sin renovar) + los que vencen en los próximos 6 meses
+    const proximos = conEstado
+      .filter(p => p.vencimiento && new Date(p.vencimiento) <= en6Meses) // incluye vencidos (sin renovar) + los que vencen en los próximos 6 meses
       .sort((a, b) => a.vencimiento.localeCompare(b.vencimiento));
 
     const cont = document.getElementById('dash-vencimientos');
@@ -6308,13 +6314,21 @@ function renderDashboard() {
       idsDelAnio.has(m.programa_id) && m.mes === mesActualDash && m.descripcion && m.descripcion.trim()
     );
     const cumplidosMes = delMesConTarea.filter(m => m.cumplido).length;
-    // Pendientes acumuladas: todo lo programado desde enero hasta hoy que sigue sin cumplir (no solo el mes en curso)
-    const pendientesAcumuladasDash = programaMonitoreoMes.filter(m =>
+    // Acumuladas sin cumplir desde enero hasta hoy (no solo el mes en curso), separadas en
+    // "En curso" (ya tienen el Plan de Acción vinculado en curso) y "Pendientes" (sin ningún avance)
+    const noCumplidasAcumuladas = programaMonitoreoMes.filter(m =>
       idsDelAnio.has(m.programa_id) && m.mes <= mesActualDash && m.descripcion && m.descripcion.trim() && !m.cumplido
-    ).length;
+    );
+    const enCursoAcumuladas = noCumplidasAcumuladas.filter(m => {
+      const plan = planesAccion.find(p => p.programa_mes_id === m.id);
+      return plan && plan.estado === 'En curso';
+    }).length;
+    const pendientesAcumuladasDash = noCumplidasAcumuladas.length - enCursoAcumuladas;
     const elC = document.getElementById('dash-monitoreos-cumplidos');
+    const elEC = document.getElementById('dash-monitoreos-encurso');
     const elP = document.getElementById('dash-monitoreos-pendientes');
     if (elC) elC.textContent = `✅ ${cumplidosMes}`;
+    if (elEC) elEC.textContent = `🔧 ${enCursoAcumuladas}`;
     if (elP) elP.textContent = `⏳ ${pendientesAcumuladasDash}`;
 
     // % de cumplimiento acumulado del año: solo cuenta lo programado desde enero hasta el mes actual (inclusive)
