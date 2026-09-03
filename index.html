@@ -1371,9 +1371,19 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           </select>
         </div>
       </div>
-      <div class="ps-field">
-        <label>Vencimiento (opcional — si lo carga, también aparece en Permisos y Registros)</label>
-        <input class="ps-input" type="date" id="f-vencimiento" style="width:100%;">
+      <div class="ps-row-2">
+        <div class="ps-field">
+          <label>Fecha de emisión (opcional)</label>
+          <input class="ps-input" type="date" id="f-emision" style="width:100%;">
+        </div>
+        <div class="ps-field">
+          <label>Vencimiento (opcional — si lo carga, también aparece en Permisos y Registros)</label>
+          <input class="ps-input" type="date" id="f-vencimiento" onchange="toggleNombrePermisoModal()" style="width:100%;">
+        </div>
+      </div>
+      <div class="ps-field" id="f-nombre-permiso-wrap" style="display:none;">
+        <label>Nombre para mostrar en Permisos (ej: "Seguro Ambiental Anual", en vez de la norma)</label>
+        <input class="ps-input" id="f-nombre-permiso" placeholder="Ej: Seguro Ambiental Anual" style="width:100%;">
       </div>
       <div style="font-size:11px;color:var(--ps-muted);">La evidencia (archivo) se adjunta desde la tabla, con el ícono 📎 — al hacerlo, el requisito pasa a "Cumplido" automáticamente.</div>
     </div>
@@ -2194,6 +2204,11 @@ function autoNivelPorJurisdiccion() {
   document.getElementById('f-nivel').value = nivelPorJurisdiccion(jurisdiccion);
 }
 
+function toggleNombrePermisoModal() {
+  const tieneVencimiento = !!document.getElementById('f-vencimiento').value;
+  document.getElementById('f-nombre-permiso-wrap').style.display = tieneVencimiento ? 'flex' : 'none';
+}
+
 let _adjCacheRequisitos = [];
 async function cargarRequisitos() {
   const tbody = document.getElementById('tbody-requisitos');
@@ -2301,6 +2316,7 @@ function abrirModalRequisito() {
   _requisitoEditId = null;
   document.getElementById('req-modal-title').textContent = 'Nuevo requisito ambiental';
   document.getElementById('req-modal-btn-guardar').textContent = 'Guardar requisito';
+  toggleNombrePermisoModal();
   document.getElementById('modal-requisito').classList.add('active');
 }
 
@@ -2318,17 +2334,20 @@ function editarRequisito(id) {
   document.getElementById('f-requisito').value = r.requisito;
   document.getElementById('f-responsable').value = r.responsable || '';
   document.getElementById('f-estado').value = r.estado;
+  document.getElementById('f-emision').value = r.emision || '';
   document.getElementById('f-vencimiento').value = r.vencimiento || '';
+  document.getElementById('f-nombre-permiso').value = r.nombre_permiso || '';
+  toggleNombrePermisoModal();
   document.getElementById('modal-requisito').classList.add('active');
 }
 
 // Actualiza solo el vencimiento de un requisito (usado desde Permisos, sin abrir el modal completo)
-async function guardarVencimientoRequisito(id, valor) {
+async function guardarCampoFechaRequisito(id, campo, valor) {
   try {
     const resp = await fetch(`${GA_TABLA_REQUISITOS}?id=eq.${id}`, {
       method: 'PATCH',
       headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
-      body: JSON.stringify({ vencimiento: valor || null }),
+      body: JSON.stringify({ [campo]: valor || null }),
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const [actualizado] = await resp.json();
@@ -2337,7 +2356,7 @@ async function guardarVencimientoRequisito(id, valor) {
     if (typeof renderPermisos === 'function') renderPermisos();
     if (typeof renderRequisitos === 'function') renderRequisitos();
   } catch (err) {
-    alert('No se pudo guardar el vencimiento: ' + err.message);
+    alert('No se pudo guardar: ' + err.message);
   }
 }
 
@@ -2394,7 +2413,7 @@ async function cerrarPlanVinculado(campoVinculo, valorId) {
 
 function cerrarModalRequisito() {
   document.getElementById('modal-requisito').classList.remove('active');
-  ['f-norma','f-alcance','f-requisito','f-responsable','f-vencimiento'].forEach(id => document.getElementById(id).value = '');
+  ['f-norma','f-alcance','f-requisito','f-responsable','f-emision','f-vencimiento','f-nombre-permiso'].forEach(id => document.getElementById(id).value = '');
   _requisitoEditId = null;
 }
 
@@ -2414,7 +2433,9 @@ async function guardarRequisito() {
     requisito,
     responsable: document.getElementById('f-responsable').value.trim() || '—',
     estado: document.getElementById('f-estado').value,
+    emision: document.getElementById('f-emision').value || null,
     vencimiento: document.getElementById('f-vencimiento').value || null,
+    nombre_permiso: document.getElementById('f-nombre-permiso').value.trim() || null,
   };
 
   // No se puede marcar "Cumplido" sin evidencia adjunta, salvo los requisitos Referenciales
@@ -2565,8 +2586,8 @@ function renderPermisos() {
   const requisitosConVenc = requisitos
     .filter(r => r.vencimiento)
     .map(r => ({
-      id: r.id, tipo: r.norma, organismo: r.jurisdiccion, emision: null, vencimiento: r.vencimiento,
-      estadoCalc: calcularEstadoPermiso(r.vencimiento), _origen: 'requisito', _alcance: r.alcance,
+      id: r.id, tipo: r.nombre_permiso || r.norma, organismo: r.jurisdiccion, emision: r.emision, vencimiento: r.vencimiento,
+      estadoCalc: calcularEstadoPermiso(r.vencimiento), _origen: 'requisito', _alcance: r.alcance, _norma: r.norma,
     }));
 
   const conEstado = [...permisosReales, ...requisitosConVenc];
@@ -2583,16 +2604,20 @@ function renderPermisos() {
     if (p._origen === 'requisito') {
       return `
     <tr style="background:#fbfaf7;">
-      <td><span class="ps-td-1line" title="${p.tipo}"><strong>${p.tipo}</strong></span> <span class="ps-badge-juris" style="margin-left:4px;">Desde Requisitos</span></td>
+      <td>
+        <span class="ps-td-1line" title="${p.tipo}"><strong>${p.tipo}</strong></span>
+        <span class="ps-badge-juris" style="margin-left:4px;">Desde Requisitos</span>
+        ${p._norma && p._norma !== p.tipo ? `<div style="font-size:10.5px;color:var(--ps-muted);margin-top:2px;">${p._norma}</div>` : ''}
+      </td>
       <td><span class="ps-td-clamp" title="${p._alcance||p.organismo}">${p._alcance || p.organismo}</span></td>
-      <td>—</td>
-      <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${p.vencimiento}" onchange="guardarVencimientoRequisito('${p.id}', this.value)"></td>
+      <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${p.emision || ''}" onchange="guardarCampoFechaRequisito('${p.id}', 'emision', this.value)"></td>
+      <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${p.vencimiento}" onchange="guardarCampoFechaRequisito('${p.id}', 'vencimiento', this.value)"></td>
       <td><span class="ps-badge ${badgeClaseEstadoPermiso(p.estadoCalc)}">${p.estadoCalc}</span></td>
       <td>
         ${botonAdjuntos('requisitos_ambientales', p.id, 'requisitos', _adjCacheRequisitos)}
       </td>
       <td style="white-space:nowrap;">
-        <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="guardarVencimientoRequisito('${p.id}', null)" title="Quitar vencimiento (no borra el requisito)">🗑️</button>
+        <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="guardarCampoFechaRequisito('${p.id}', 'vencimiento', null)" title="Quitar vencimiento (no borra el requisito)">🗑️</button>
       </td>
     </tr>`;
     }
