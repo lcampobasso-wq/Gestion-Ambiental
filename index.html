@@ -326,7 +326,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
             <span id="dash-monitoreos-cumplidos" style="background:#c6f6d5;color:#276749;padding:4px 11px;border-radius:20px;font-weight:800;font-size:15px;">—</span>
             <span id="dash-monitoreos-pendientes" style="background:#fed7d7;color:#9b2c2c;padding:4px 11px;border-radius:20px;font-weight:800;font-size:15px;">—</span>
           </div>
-          <div class="ps-card-sub">✅ Cumplidos · ⏳ Pendientes (Programa Anual)</div>
+          <div class="ps-card-sub">✅ Cumplidos este mes · ⏳ Pendientes acumuladas</div>
         </div>
         <div class="ps-card">
           <div class="ps-card-icon ps-icon-purple">📅</div>
@@ -348,7 +348,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
 
       <div class="ps-grid-2">
         <div class="ps-content-card">
-          <div class="ps-content-card-title">Próximos vencimientos <span style="font-weight:400;font-size:11px;color:var(--ps-muted);">(6 meses)</span></div>
+          <div class="ps-content-card-title">Vencimientos <span style="font-weight:400;font-size:11px;color:var(--ps-muted);">(vencidos + próximos 6 meses)</span></div>
           <div id="dash-vencimientos"></div>
         </div>
         <div class="ps-content-card">
@@ -5821,7 +5821,7 @@ function renderDashboard() {
     const en6Meses = new Date(hoy());
     en6Meses.setMonth(en6Meses.getMonth() + 6);
     const proximos = permisos
-      .filter(p => new Date(p.vencimiento) >= hoy() && new Date(p.vencimiento) <= en6Meses)
+      .filter(p => new Date(p.vencimiento) <= en6Meses) // incluye vencidos (sin renovar) + los que vencen en los próximos 6 meses
       .sort((a, b) => a.vencimiento.localeCompare(b.vencimiento));
 
     const cont = document.getElementById('dash-vencimientos');
@@ -5830,8 +5830,8 @@ function renderDashboard() {
         cont.innerHTML = `
           <div class="ps-empty">
             <div class="ps-empty-icon">🪪</div>
-            <div class="ps-empty-title">Sin vencimientos en los próximos 6 meses</div>
-            <div>Acá van a aparecer permisos y habilitaciones próximos a vencer</div>
+            <div class="ps-empty-title">Sin vencimientos ni vencidos pendientes</div>
+            <div>Acá van a aparecer permisos vencidos o próximos a vencer</div>
           </div>`;
       } else {
         cont.innerHTML = `
@@ -5870,11 +5870,14 @@ function renderDashboard() {
       idsDelAnio.has(m.programa_id) && m.mes === mesActualDash && m.descripcion && m.descripcion.trim()
     );
     const cumplidosMes = delMesConTarea.filter(m => m.cumplido).length;
-    const pendientesMes = delMesConTarea.length - cumplidosMes;
+    // Pendientes acumuladas: todo lo programado desde enero hasta hoy que sigue sin cumplir (no solo el mes en curso)
+    const pendientesAcumuladasDash = programaMonitoreoMes.filter(m =>
+      idsDelAnio.has(m.programa_id) && m.mes <= mesActualDash && m.descripcion && m.descripcion.trim() && !m.cumplido
+    ).length;
     const elC = document.getElementById('dash-monitoreos-cumplidos');
     const elP = document.getElementById('dash-monitoreos-pendientes');
     if (elC) elC.textContent = `✅ ${cumplidosMes}`;
-    if (elP) elP.textContent = `⏳ ${pendientesMes}`;
+    if (elP) elP.textContent = `⏳ ${pendientesAcumuladasDash}`;
 
     // % de cumplimiento acumulado del año: solo cuenta lo programado desde enero hasta el mes actual (inclusive)
     const transcurridoConTarea = programaMonitoreoMes.filter(m =>
