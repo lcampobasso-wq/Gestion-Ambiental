@@ -532,7 +532,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <table class="ps-table">
             <thead>
               <tr>
-                <th class="col-norma">Tipo</th>
+                <th style="width:260px;">Tipo</th>
                 <th class="col-juris">Autoridad</th>
                 <th class="col-juris">Base / Ubicación</th>
                 <th class="col-responsable">Emisión</th>
@@ -2839,15 +2839,16 @@ function renderPermisos() {
   );
 
   let filasHtml = '';
+  let grupoActual = null;
   ordenados.forEach(p => {
+    if (p.tipo !== grupoActual) {
+      grupoActual = p.tipo;
+      filasHtml += `<tr><td colspan="8" style="background:#f7fafc;padding:9px 14px;font-family:var(--ps-font-title);font-weight:700;font-size:12px;color:var(--ps-header-bg);">${p.tipo}${p._origen === 'requisito' ? ' <span class="ps-badge-juris" style="margin-left:4px;font-weight:600;">Desde Requisitos</span>' : ''}${p._norma && p._norma !== p.tipo ? `<div style="font-size:10.5px;color:var(--ps-muted);margin-top:2px;font-weight:400;">${p._norma}</div>` : ''}</td></tr>`;
+    }
     if (p._origen === 'requisito') {
       filasHtml += `
     <tr style="background:#fbfaf7;">
-      <td>
-        <span class="ps-td-1line" title="${p.tipo}"><strong>${p.tipo}</strong></span>
-        <span class="ps-badge-juris" style="margin-left:4px;">Desde Requisitos</span>
-        ${p._norma && p._norma !== p.tipo ? `<div style="font-size:10.5px;color:var(--ps-muted);margin-top:2px;">${p._norma}</div>` : ''}
-      </td>
+      <td></td>
       <td><span class="ps-td-clamp" title="${p.autoridad||''}">${p.autoridad || '—'}</span></td>
       <td><span class="ps-td-clamp" title="${p.base||''}">${p.base || '—'}</span></td>
       <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${p.emision || ''}" onchange="guardarCampoVigencia('${p.id}', 'fecha_emision', this.value)"></td>
@@ -2863,9 +2864,7 @@ function renderPermisos() {
     } else {
       filasHtml += `
     <tr>
-      <td>
-        <span class="ps-td-1line" title="${p.tipo}"><strong>${p.tipo}</strong></span>
-      </td>
+      <td></td>
       <td><span class="ps-td-clamp" title="${p.autoridad||''}">${p.autoridad || '—'}</span></td>
       <td><span class="ps-td-clamp" title="${p.base||''}">${p.base || '—'}</span></td>
       <td>${formatFecha(p.emision)}</td>
