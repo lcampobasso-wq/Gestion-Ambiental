@@ -533,7 +533,8 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
             <thead>
               <tr>
                 <th class="col-norma">Tipo</th>
-                <th class="col-juris">Organismo</th>
+                <th class="col-juris">Autoridad</th>
+                <th class="col-juris">Base / Ubicación</th>
                 <th class="col-responsable">Emisión</th>
                 <th class="col-responsable">Vencimiento</th>
                 <th class="col-estado">Estado</th>
@@ -2766,7 +2767,7 @@ const badgeClaseEstadoPermiso = e => e === 'Vigente' ? 'ps-badge-ok' : e === 'Po
 let _adjCachePermisos = [];
 async function cargarPermisos() {
   const tbody = document.getElementById('tbody-permisos');
-  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando permisos...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--ps-muted);padding:18px;">Cargando permisos...</td></tr>`;
   try {
     const [resp, adj] = await Promise.all([
       fetch(`${GA_TABLA_PERMISOS}?select=*&order=vencimiento.asc`, { headers: gaHeaders() }),
@@ -2777,7 +2778,7 @@ async function cargarPermisos() {
     _adjCachePermisos = adj;
     renderPermisos();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
   }
 }
 async function refrescarAdjuntos_permisos_ambientales() {
@@ -2788,7 +2789,12 @@ async function refrescarAdjuntos_permisos_ambientales() {
 // Combina permisos reales + vigencias de requisitos con vencimiento (usado por Permisos Y por el Dashboard,
 // para que ambos cuenten siempre exactamente lo mismo).
 function obtenerPermisosCombinados() {
-  const permisosReales = permisos.map(p => ({ ...p, estadoCalc: calcularEstadoPermiso(p.vencimiento), _origen: 'permiso' }));
+  // "Autoridad" = organismo que regula/exige. "Base" = ubicación/planta a la que corresponde.
+  // Se muestran siempre como dos columnas separadas (nunca se mezclan ni se rellenan una con la otra).
+  const permisosReales = permisos.map(p => ({
+    ...p, estadoCalc: calcularEstadoPermiso(p.vencimiento), _origen: 'permiso',
+    autoridad: p.organismo || null, base: null,
+  }));
 
   const requisitosConVenc = requisitoVigencias.map(v => {
     const r = requisitos.find(x => x.id === v.requisito_id);
@@ -2797,8 +2803,9 @@ function obtenerPermisosCombinados() {
     const detalle = [v.numero ? `N° ${v.numero}` : null, v.tipo_vencimiento || null].filter(Boolean).join(' — ');
     return {
       id: v.id, tipo: detalle ? `${nombreBase} (${detalle})` : nombreBase,
-      organismo: v.base || r.jurisdiccion, emision: v.fecha_emision, vencimiento: v.fecha_vencimiento,
-      estadoCalc: calcularEstadoPermiso(v.fecha_vencimiento), _origen: 'requisito', _alcance: r.alcance, _norma: r.norma, _requisitoId: r.id, _autoridad: r.autoridad_aplicacion,
+      autoridad: r.autoridad_aplicacion || null, base: v.base || null,
+      emision: v.fecha_emision, vencimiento: v.fecha_vencimiento,
+      estadoCalc: calcularEstadoPermiso(v.fecha_vencimiento), _origen: 'requisito', _alcance: r.alcance, _norma: r.norma, _requisitoId: r.id,
     };
   }).filter(Boolean);
 
@@ -2815,7 +2822,7 @@ function renderPermisos() {
   const filtrados = conEstado.filter(p =>
     (!tFiltro || p.tipo === tFiltro) &&
     (!eFiltro || p.estadoCalc === eFiltro) &&
-    (!texto || (p.tipo + p.organismo).toLowerCase().includes(texto))
+    (!texto || (p.tipo + (p.autoridad||'') + (p.base||'')).toLowerCase().includes(texto))
   );
 
   const tbody = document.getElementById('tbody-permisos');
@@ -2837,7 +2844,8 @@ function renderPermisos() {
         <span class="ps-badge-juris" style="margin-left:4px;">Desde Requisitos</span>
         ${p._norma && p._norma !== p.tipo ? `<div style="font-size:10.5px;color:var(--ps-muted);margin-top:2px;">${p._norma}</div>` : ''}
       </td>
-      <td><span class="ps-td-clamp" title="${p._autoridad||p.organismo}">${p._autoridad || p.organismo}</span></td>
+      <td><span class="ps-td-clamp" title="${p.autoridad||''}">${p.autoridad || '—'}</span></td>
+      <td><span class="ps-td-clamp" title="${p.base||''}">${p.base || '—'}</span></td>
       <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${p.emision || ''}" onchange="guardarCampoVigencia('${p.id}', 'fecha_emision', this.value)"></td>
       <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${p.vencimiento}" onchange="guardarCampoVigencia('${p.id}', 'fecha_vencimiento', this.value)"></td>
       <td><span class="ps-badge ${badgeClaseEstadoPermiso(p.estadoCalc)}">${p.estadoCalc}</span></td>
@@ -2854,7 +2862,8 @@ function renderPermisos() {
       <td>
         <span class="ps-td-1line" title="${p.tipo}"><strong>${p.tipo}</strong></span>
       </td>
-      <td><span class="ps-td-clamp" title="${p.organismo}">${p.organismo}</span></td>
+      <td><span class="ps-td-clamp" title="${p.autoridad||''}">${p.autoridad || '—'}</span></td>
+      <td><span class="ps-td-clamp" title="${p.base||''}">${p.base || '—'}</span></td>
       <td>${formatFecha(p.emision)}</td>
       <td>${formatFecha(p.vencimiento)}</td>
       <td><span class="ps-badge ${badgeClaseEstadoPermiso(p.estadoCalc)}">${p.estadoCalc}</span></td>
@@ -5066,7 +5075,7 @@ async function cargarPlanesAccion() {
     if (typeof sincronizarPlanesDeRequisitos === 'function') sincronizarPlanesDeRequisitos();
   } catch (err) {
     const tbody = document.getElementById('tbody-planes-accion');
-    if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#9b2c2c;padding:18px;">No se pudo conectar con la base de datos (${err.message}).</td></tr>`;
   }
 }
 async function refrescarAdjuntos_planes_accion() {
@@ -6425,13 +6434,14 @@ function renderDashboard() {
         cont.innerHTML = `
           <div class="ps-table-wrap">
             <table class="ps-table">
-              <thead><tr><th class="col-norma">Tipo</th><th class="col-juris">Organismo</th><th class="col-responsable">Vencimiento</th><th class="col-estado">Estado</th></tr></thead>
+              <thead><tr><th class="col-norma">Tipo</th><th class="col-juris">Autoridad / Base</th><th class="col-responsable">Vencimiento</th><th class="col-estado">Estado</th></tr></thead>
               <tbody>
                 ${proximos.map(p => {
                   const estadoCalc = calcularEstadoPermiso(p.vencimiento);
+                  const autBase = [p.autoridad, p.base].filter(Boolean).join(' — ') || '—';
                   return `<tr>
                     <td><span class="ps-td-1line" title="${p.tipo}"><strong>${p.tipo}</strong></span></td>
-                    <td><span class="ps-td-clamp" title="${p.organismo}">${p.organismo}</span></td>
+                    <td><span class="ps-td-clamp" title="${autBase}">${autBase}</span></td>
                     <td>${formatFecha(p.vencimiento)}</td>
                     <td><span class="ps-badge ${badgeClaseEstadoPermiso(estadoCalc)}">${estadoCalc}</span></td>
                   </tr>`;
