@@ -502,6 +502,8 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <button class="ps-btn ps-btn-primary" onclick="abrirModalPermiso()">+ Nuevo permiso</button>
         </div>
 
+        <div id="perm-alerta-sueltos"></div>
+
         <div class="ps-filters">
           <div class="ps-field">
             <label>Tipo</label>
@@ -2125,6 +2127,7 @@ async function subirArchivoGA(archivo, carpeta) {
 /* ══════════════ ADJUNTOS MÚLTIPLES (genérico, reutilizado en toda la app) ══════════════ */
 const GA_TABLA_ADJUNTOS = `${GA_SUPABASE_URL}/rest/v1/adjuntos`;
 let _adjTabla = null, _adjRegistroId = null, _adjCarpeta = null, _adjOnCambio = null, _adjOnAdd = null;
+let _adjTablaExtra = null, _adjRegistroIdExtra = null, _adjEtiquetaExtra = null; // fuente extra de solo lectura combinada (ej: evidencia del Requisito en una fila de Vigencia)
 
 // Trae de una sola vez todos los adjuntos de un "tabla" (tipo de campo) — evita 1 consulta por fila.
 async function cargarAdjuntosDeTipo(tabla) {
@@ -2143,12 +2146,40 @@ function botonAdjuntos(tabla, registroId, carpeta, cache) {
   return `<button class="ps-btn" style="padding:4px 10px;font-size:11px;" onclick="abrirModalAdjuntos('${tabla}','${registroId}','${carpeta}')">📎 ${n}</button>`;
 }
 
-function abrirModalAdjuntos(tabla, registroId, carpeta, onCambio, onAdd) {
+// Botón combinado: suma la evidencia propia de la Vigencia + la general del Requisito, para no
+// tener que subir el mismo archivo dos veces. El "+ Agregar" sigue yendo a la Vigencia específica.
+function botonAdjuntosVigenciaConRequisito(vigenciaId, requisitoId) {
+  const nVig = _adjCacheVigencias.filter(a => a.registro_id === vigenciaId).length;
+  const nReq = _adjCacheRequisitos.filter(a => a.registro_id === requisitoId).length;
+  return `<button class="ps-btn" style="padding:4px 10px;font-size:11px;" onclick="abrirModalAdjuntosCombinado('${vigenciaId}','${requisitoId}')">📎 ${nVig + nReq}</button>`;
+}
+function abrirModalAdjuntosCombinado(vigenciaId, requisitoId) {
+  abrirModalAdjuntos(
+    'requisito_vigencia', vigenciaId, 'requisitos-vigencias',
+    () => {
+      if (typeof renderPermisos === 'function') renderPermisos();
+      if (typeof renderListaVigencias === 'function' && document.getElementById('modal-vigencias').classList.contains('active')) renderListaVigencias();
+    },
+    null,
+    { tabla: 'requisitos_ambientales', registroId: requisitoId, etiqueta: 'Del requisito' }
+  );
+}
+
+function abrirModalAdjuntos(tabla, registroId, carpeta, onCambio, onAdd, extra) {
   _adjTabla = tabla;
   _adjRegistroId = registroId;
   _adjCarpeta = carpeta;
   _adjOnCambio = typeof onCambio === 'function' ? onCambio : window['refrescarAdjuntos_' + tabla];
   _adjOnAdd = typeof onAdd === 'function' ? onAdd : null;
+  if (extra && extra.tabla && extra.registroId) {
+    _adjTablaExtra = extra.tabla;
+    _adjRegistroIdExtra = extra.registroId;
+    _adjEtiquetaExtra = extra.etiqueta || null;
+  } else {
+    _adjTablaExtra = null;
+    _adjRegistroIdExtra = null;
+    _adjEtiquetaExtra = null;
+  }
   document.getElementById('adj-modal-file').value = '';
   document.getElementById('modal-adjuntos').classList.add('active');
   renderListaAdjuntosModal();
@@ -2161,12 +2192,22 @@ async function renderListaAdjuntosModal() {
   const cont = document.getElementById('adj-modal-lista');
   cont.innerHTML = '<div style="color:var(--ps-muted);font-size:12px;">Cargando...</div>';
   try {
-    const resp = await fetch(`${GA_TABLA_ADJUNTOS}?select=*&tabla=eq.${_adjTabla}&registro_id=eq.${_adjRegistroId}&order=uploaded_at.asc`, { headers: gaHeaders() });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const lista = await resp.json();
-    cont.innerHTML = lista.length ? lista.map(a => `
+    const peticiones = [
+      fetch(`${GA_TABLA_ADJUNTOS}?select=*&tabla=eq.${_adjTabla}&registro_id=eq.${_adjRegistroId}&order=uploaded_at.asc`, { headers: gaHeaders() }),
+    ];
+    if (_adjTablaExtra && _adjRegistroIdExtra) {
+      peticiones.push(fetch(`${GA_TABLA_ADJUNTOS}?select=*&tabla=eq.${_adjTablaExtra}&registro_id=eq.${_adjRegistroIdExtra}&order=uploaded_at.asc`, { headers: gaHeaders() }));
+    }
+    const resps = await Promise.all(peticiones);
+    for (const r of resps) if (!r.ok) throw new Error('HTTP ' + r.status);
+    const lista = await resps[0].json();
+    const listaExtra = resps[1] ? (await resps[1].json()).map(a => ({ ...a, _esExtra: true })) : [];
+    const combinada = [...lista, ...listaExtra];
+
+    cont.innerHTML = combinada.length ? combinada.map(a => `
       <div class="ps-item-chip">
         <a href="${a.url}" target="_blank" class="ps-item-chip-text" style="color:#3182ce;text-decoration:none;">📄 ${a.nombre}</a>
+        ${a._esExtra ? `<span class="ps-badge-juris" style="margin-left:4px;">${_adjEtiquetaExtra}</span>` : ''}
         <button class="ps-item-chip-remove" onclick="eliminarAdjunto('${a.id}')" title="Eliminar">✕</button>
       </div>
     `).join('') : '<div style="color:var(--ps-muted);font-size:12px;">Todavía no hay archivos adjuntos</div>';
@@ -2462,7 +2503,7 @@ function renderListaVigencias() {
       <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${v.fecha_emision||''}" onchange="guardarCampoVigencia('${v.id}','fecha_emision',this.value)"></td>
       <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${v.fecha_vencimiento}" onchange="guardarCampoVigencia('${v.id}','fecha_vencimiento',this.value)"></td>
       <td><span class="ps-badge ${badgeClaseEstadoPermiso(calcularEstadoPermiso(v.fecha_vencimiento))}">${calcularEstadoPermiso(v.fecha_vencimiento)}</span></td>
-      <td>${botonAdjuntos('requisito_vigencia', v.id, 'requisitos-vigencias', _adjCacheVigencias)}</td>
+      <td>${botonAdjuntosVigenciaConRequisito(v.id, v.requisito_id)}</td>
       <td><button class="ps-btn" style="padding:3px 7px;font-size:10px;" onclick="eliminarVigencia('${v.id}')" title="Eliminar">🗑️</button></td>
     </tr>
   `).join('') : `<tr><td colspan="7" style="text-align:center;color:var(--ps-muted);padding:14px;">Todavía no hay vigencias cargadas para este requisito.</td></tr>`;
@@ -2739,7 +2780,7 @@ function obtenerPermisosCombinados() {
     return {
       id: v.id, tipo: detalle ? `${nombreBase} (${detalle})` : nombreBase,
       organismo: v.base || r.jurisdiccion, emision: v.fecha_emision, vencimiento: v.fecha_vencimiento,
-      estadoCalc: calcularEstadoPermiso(v.fecha_vencimiento), _origen: 'requisito', _alcance: r.alcance, _norma: r.norma,
+      estadoCalc: calcularEstadoPermiso(v.fecha_vencimiento), _origen: 'requisito', _alcance: r.alcance, _norma: r.norma, _requisitoId: r.id,
     };
   }).filter(Boolean);
 
@@ -2753,6 +2794,15 @@ function renderPermisos() {
 
   const conEstado = obtenerPermisosCombinados();
 
+  const sueltos = conEstado.filter(p => p._origen === 'permiso');
+  const alertaEl = document.getElementById('perm-alerta-sueltos');
+  if (alertaEl) {
+    alertaEl.innerHTML = sueltos.length ? `
+      <div style="background:#feebc8;color:#7c4a03;padding:10px 16px;border-radius:10px;margin-bottom:14px;font-size:13px;font-weight:600;">
+        ⚠️ ${sueltos.length} permiso${sueltos.length>1?'s':''} cargado${sueltos.length>1?'s':''} suelto${sueltos.length>1?'s':''}, sin vincular a ningún Requisito de la Matriz — considerá cargarlo${sueltos.length>1?'s':''} ahí como corresponde.
+      </div>` : '';
+  }
+
   const filtrados = conEstado.filter(p =>
     (!tFiltro || p.tipo === tFiltro) &&
     (!eFiltro || p.estadoCalc === eFiltro) &&
@@ -2761,9 +2811,17 @@ function renderPermisos() {
 
   const tbody = document.getElementById('tbody-permisos');
   const empty = document.getElementById('perm-empty');
-  tbody.innerHTML = filtrados.map(p => {
+
+  // Agrupa por Tipo (no por origen), para que las vigencias del mismo certificado —
+  // sea de Requisitos o cargado suelto— queden juntas en vez de mezcladas sin criterio.
+  const ordenados = [...filtrados].sort((a, b) =>
+    (a.tipo || '').localeCompare(b.tipo || '') || (a.organismo || '').localeCompare(b.organismo || '')
+  );
+
+  let filasHtml = '';
+  ordenados.forEach(p => {
     if (p._origen === 'requisito') {
-      return `
+      filasHtml += `
     <tr style="background:#fbfaf7;">
       <td>
         <span class="ps-td-1line" title="${p.tipo}"><strong>${p.tipo}</strong></span>
@@ -2775,16 +2833,19 @@ function renderPermisos() {
       <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${p.vencimiento}" onchange="guardarCampoVigencia('${p.id}', 'fecha_vencimiento', this.value)"></td>
       <td><span class="ps-badge ${badgeClaseEstadoPermiso(p.estadoCalc)}">${p.estadoCalc}</span></td>
       <td>
-        ${botonAdjuntos('requisito_vigencia', p.id, 'requisitos-vigencias', _adjCacheVigencias)}
+        ${botonAdjuntosVigenciaConRequisito(p.id, p._requisitoId)}
       </td>
       <td style="white-space:nowrap;">
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="eliminarVigencia('${p.id}')" title="Eliminar esta vigencia (no borra el requisito)">🗑️</button>
       </td>
     </tr>`;
-    }
-    return `
-    <tr>
-      <td><span class="ps-td-1line" title="${p.tipo}"><strong>${p.tipo}</strong></span></td>
+    } else {
+      filasHtml += `
+    <tr style="background:#fffaf0;">
+      <td>
+        <span class="ps-td-1line" title="${p.tipo}"><strong>${p.tipo}</strong></span>
+        <div style="font-size:10.5px;color:#c05621;margin-top:2px;font-weight:600;">⚠️ No vinculado a la Matriz de Requisitos</div>
+      </td>
       <td><span class="ps-td-clamp" title="${p.organismo}">${p.organismo}</span></td>
       <td>${formatFecha(p.emision)}</td>
       <td>${formatFecha(p.vencimiento)}</td>
@@ -2797,7 +2858,9 @@ function renderPermisos() {
         <button class="ps-btn" style="padding:4px 8px;font-size:11px;" onclick="eliminarPermiso('${p.id}')" title="Eliminar">🗑️</button>
       </td>
     </tr>`;
-  }).join('');
+    }
+  });
+  tbody.innerHTML = filasHtml;
 
   tbody.closest('.ps-table-wrap').style.display = filtrados.length ? '' : 'none';
   empty.style.display = filtrados.length ? 'none' : 'block';
