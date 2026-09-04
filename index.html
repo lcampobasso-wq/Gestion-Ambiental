@@ -1412,8 +1412,12 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
         </div>
       </div>
       <div class="ps-field">
-        <label>Alcance</label>
-        <input class="ps-input" id="f-alcance" placeholder="Ej: Gestión integral de residuos industriales" style="width:100%;">
+        <label>Descripción de la norma (opcional — de qué trata en general)</label>
+        <textarea class="ps-input" id="f-descripcion-norma" placeholder="Ej: Aprueba el Acuerdo Marco entre la República Argentina y..."></textarea>
+      </div>
+      <div class="ps-field">
+        <label>Alcance en operaciones de Petrosar (dónde/qué aplica puntualmente)</label>
+        <input class="ps-input" id="f-alcance" placeholder="Ej: Estación de servicio — tanques subterráneos" style="width:100%;">
       </div>
       <div class="ps-field">
         <label>Requisito específico</label>
@@ -2384,7 +2388,10 @@ function renderRequisitos() {
     filasHtml += `
     <tr>
       <td><span class="ps-badge ${badgeClaseNivel(r.nivel)}">${r.nivel}</span></td>
-      <td><span class="ps-td-clamp" title="${r.norma}"><strong>${r.norma}</strong></span></td>
+      <td>
+        <span class="ps-td-clamp" title="${r.norma}"><strong>${r.norma}</strong></span>
+        ${r.descripcion_norma ? `<span title="${r.descripcion_norma.replace(/"/g,'&quot;')}" style="cursor:help;color:var(--ps-muted);margin-left:3px;font-size:11px;">ℹ️</span>` : ''}
+      </td>
       <td><span class="ps-badge-juris">${r.jurisdiccion}</span></td>
       <td><span class="ps-td-clamp" title="${r.alcance||''}">${r.alcance||''}</span></td>
       <td><span class="ps-td-clamp" title="${r.requisito}">${r.requisito}</span></td>
@@ -2443,6 +2450,7 @@ function editarRequisito(id) {
   document.getElementById('f-jurisdiccion').value = r.jurisdiccion;
   document.getElementById('f-nivel').value = r.nivel;
   document.getElementById('f-tipo').value = r.tipo;
+  document.getElementById('f-descripcion-norma').value = r.descripcion_norma || '';
   document.getElementById('f-alcance').value = r.alcance || '';
   document.getElementById('f-requisito').value = r.requisito;
   document.getElementById('f-responsable').value = r.responsable || '';
@@ -2605,7 +2613,7 @@ async function cerrarPlanVinculado(campoVinculo, valorId) {
 
 function cerrarModalRequisito() {
   document.getElementById('modal-requisito').classList.remove('active');
-  ['f-norma','f-alcance','f-requisito','f-responsable','f-nombre-permiso'].forEach(id => document.getElementById(id).value = '');
+  ['f-norma','f-descripcion-norma','f-alcance','f-requisito','f-responsable','f-nombre-permiso'].forEach(id => document.getElementById(id).value = '');
   _requisitoEditId = null;
 }
 
@@ -2621,6 +2629,7 @@ async function guardarRequisito() {
     jurisdiccion: document.getElementById('f-jurisdiccion').value,
     nivel: document.getElementById('f-nivel').value,
     tipo: document.getElementById('f-tipo').value,
+    descripcion_norma: document.getElementById('f-descripcion-norma').value.trim() || null,
     alcance: document.getElementById('f-alcance').value.trim(),
     requisito,
     responsable: document.getElementById('f-responsable').value.trim() || '—',
