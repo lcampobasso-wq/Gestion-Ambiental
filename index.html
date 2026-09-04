@@ -2401,7 +2401,7 @@ function renderRequisitos() {
       </td>
       <td>
         <span class="ps-badge-juris">${r.jurisdiccion}</span>
-        ${r.autoridad_aplicacion ? `<div style="font-size:10px;color:var(--ps-muted);margin-top:2px;">${r.autoridad_aplicacion}</div>` : ''}
+        ${r.autoridad_aplicacion ? `<span title="${r.autoridad_aplicacion.replace(/"/g,'&quot;')}" style="cursor:help;color:var(--ps-muted);margin-left:3px;font-size:11px;">🏛️</span>` : ''}
       </td>
       <td><span class="ps-td-clamp" title="${r.alcance||''}">${r.alcance||''}</span></td>
       <td><span class="ps-td-clamp" title="${r.requisito}">${r.requisito}</span></td>
