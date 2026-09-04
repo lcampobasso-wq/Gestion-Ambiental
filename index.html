@@ -472,7 +472,7 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
                 <th style="width:95px;">Nivel</th>
                 <th class="col-alcance">Norma</th>
                 <th class="col-juris">Jurisdicción</th>
-                <th class="col-alcance">Alcance</th>
+                <th class="col-alcance">Tema</th>
                 <th class="col-requisito">Requisito</th>
                 <th style="width:90px;">Tipo</th>
                 <th class="col-estado">Estado</th>
@@ -1415,12 +1415,18 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
         <label>Descripción de la norma (opcional — de qué trata en general)</label>
         <textarea class="ps-input" id="f-descripcion-norma" placeholder="Ej: Aprueba el Acuerdo Marco entre la República Argentina y..."></textarea>
       </div>
-      <div class="ps-field">
-        <label>Alcance en operaciones de Petrosar (dónde/qué aplica puntualmente)</label>
-        <input class="ps-input" id="f-alcance" placeholder="Ej: Estación de servicio — tanques subterráneos" style="width:100%;">
+      <div class="ps-row-2">
+        <div class="ps-field">
+          <label>Tema</label>
+          <input class="ps-input" id="f-alcance" placeholder="Ej: Medio Ambiente, Residuos Peligrosos" style="width:100%;">
+        </div>
+        <div class="ps-field">
+          <label>Autoridad de Aplicación</label>
+          <input class="ps-input" id="f-autoridad" placeholder="Ej: Ministerio de Ambiente y Desarrollo Sostenible" style="width:100%;">
+        </div>
       </div>
       <div class="ps-field">
-        <label>Requisito específico</label>
+        <label>Requisito específico (obligación que genera)</label>
         <textarea class="ps-input" id="f-requisito" placeholder="Detalle del requisito a cumplir..."></textarea>
       </div>
       <div class="ps-row-2">
@@ -2392,7 +2398,10 @@ function renderRequisitos() {
         <span class="ps-td-clamp" title="${r.norma}"><strong>${r.norma}</strong></span>
         ${r.descripcion_norma ? `<span title="${r.descripcion_norma.replace(/"/g,'&quot;')}" style="cursor:help;color:var(--ps-muted);margin-left:3px;font-size:11px;">ℹ️</span>` : ''}
       </td>
-      <td><span class="ps-badge-juris">${r.jurisdiccion}</span></td>
+      <td>
+        <span class="ps-badge-juris">${r.jurisdiccion}</span>
+        ${r.autoridad_aplicacion ? `<div style="font-size:10px;color:var(--ps-muted);margin-top:2px;">${r.autoridad_aplicacion}</div>` : ''}
+      </td>
       <td><span class="ps-td-clamp" title="${r.alcance||''}">${r.alcance||''}</span></td>
       <td><span class="ps-td-clamp" title="${r.requisito}">${r.requisito}</span></td>
       <td><span class="ps-badge ${badgeClaseTipo(r.tipo)}">${r.tipo}</span></td>
@@ -2452,6 +2461,7 @@ function editarRequisito(id) {
   document.getElementById('f-tipo').value = r.tipo;
   document.getElementById('f-descripcion-norma').value = r.descripcion_norma || '';
   document.getElementById('f-alcance').value = r.alcance || '';
+  document.getElementById('f-autoridad').value = r.autoridad_aplicacion || '';
   document.getElementById('f-requisito').value = r.requisito;
   document.getElementById('f-responsable').value = r.responsable || '';
   document.getElementById('f-estado').value = r.estado;
@@ -2613,7 +2623,7 @@ async function cerrarPlanVinculado(campoVinculo, valorId) {
 
 function cerrarModalRequisito() {
   document.getElementById('modal-requisito').classList.remove('active');
-  ['f-norma','f-descripcion-norma','f-alcance','f-requisito','f-responsable','f-nombre-permiso'].forEach(id => document.getElementById(id).value = '');
+  ['f-norma','f-descripcion-norma','f-alcance','f-autoridad','f-requisito','f-responsable','f-nombre-permiso'].forEach(id => document.getElementById(id).value = '');
   _requisitoEditId = null;
 }
 
@@ -2631,6 +2641,7 @@ async function guardarRequisito() {
     tipo: document.getElementById('f-tipo').value,
     descripcion_norma: document.getElementById('f-descripcion-norma').value.trim() || null,
     alcance: document.getElementById('f-alcance').value.trim(),
+    autoridad_aplicacion: document.getElementById('f-autoridad').value.trim() || null,
     requisito,
     responsable: document.getElementById('f-responsable').value.trim() || '—',
     estado: document.getElementById('f-estado').value,
@@ -2682,7 +2693,7 @@ function descargarMatrizComoApp() {
 
 // Descarga la matriz completa como CSV (se abre directo en Excel/Sheets)
 function descargarMatrizRequisitos() {
-  const encabezados = ['Norma', 'Jurisdicción', 'Alcance', 'Requisito', 'Tipo', 'Estado', 'Evidencia'];
+  const encabezados = ['Norma', 'Descripción de la norma', 'Jurisdicción', 'Autoridad de Aplicación', 'Tema', 'Requisito', 'Tipo', 'Estado', 'Evidencia'];
   const escaparCSV = (valor) => `"${String(valor || '').replace(/"/g, '""')}"`;
   const ordenNiveles = ['Nacional', 'Provincial', 'Municipal'];
 
@@ -2694,7 +2705,7 @@ function descargarMatrizRequisitos() {
     filas.push(escaparCSV(`NIVEL ${nivel.toUpperCase()}`));
     filas.push(encabezados.map(escaparCSV).join(','));
     delNivel.forEach(r => {
-      filas.push([r.norma, r.jurisdiccion, r.alcance, r.requisito, r.tipo, r.estado, r.evidencia_nombre].map(escaparCSV).join(','));
+      filas.push([r.norma, r.descripcion_norma, r.jurisdiccion, r.autoridad_aplicacion, r.alcance, r.requisito, r.tipo, r.estado, r.evidencia_nombre].map(escaparCSV).join(','));
     });
   });
 
@@ -2787,7 +2798,7 @@ function obtenerPermisosCombinados() {
     return {
       id: v.id, tipo: detalle ? `${nombreBase} (${detalle})` : nombreBase,
       organismo: v.base || r.jurisdiccion, emision: v.fecha_emision, vencimiento: v.fecha_vencimiento,
-      estadoCalc: calcularEstadoPermiso(v.fecha_vencimiento), _origen: 'requisito', _alcance: r.alcance, _norma: r.norma, _requisitoId: r.id,
+      estadoCalc: calcularEstadoPermiso(v.fecha_vencimiento), _origen: 'requisito', _alcance: r.alcance, _norma: r.norma, _requisitoId: r.id, _autoridad: r.autoridad_aplicacion,
     };
   }).filter(Boolean);
 
@@ -2826,7 +2837,7 @@ function renderPermisos() {
         <span class="ps-badge-juris" style="margin-left:4px;">Desde Requisitos</span>
         ${p._norma && p._norma !== p.tipo ? `<div style="font-size:10.5px;color:var(--ps-muted);margin-top:2px;">${p._norma}</div>` : ''}
       </td>
-      <td><span class="ps-td-clamp" title="${p._alcance||p.organismo}">${p._alcance || p.organismo}</span></td>
+      <td><span class="ps-td-clamp" title="${p._autoridad||p.organismo}">${p._autoridad || p.organismo}</span></td>
       <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${p.emision || ''}" onchange="guardarCampoVigencia('${p.id}', 'fecha_emision', this.value)"></td>
       <td><input type="date" class="ps-input" style="min-width:auto;padding:4px 6px;font-size:12px;" value="${p.vencimiento}" onchange="guardarCampoVigencia('${p.id}', 'fecha_vencimiento', this.value)"></td>
       <td><span class="ps-badge ${badgeClaseEstadoPermiso(p.estadoCalc)}">${p.estadoCalc}</span></td>
