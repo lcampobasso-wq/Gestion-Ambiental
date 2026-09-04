@@ -192,6 +192,8 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
   background: white; white-space: nowrap;
 }
 .ps-file-btn:hover { border-color: var(--ps-header-bg); color: var(--ps-header-bg); }
+.ps-dropzone { border: 2px dashed var(--ps-border); border-radius: var(--ps-radius-md); padding: 14px; transition: all 0.15s; }
+.ps-dropzone-activa { border-color: var(--ps-header-bg); background: #f0f4fa; }
 .ps-file-btn input[type="file"] { display: none; }
 
 .ps-item-chip {
@@ -1300,10 +1302,13 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
       <div class="ps-modal-title">Archivos adjuntos</div>
       <button class="ps-modal-close" onclick="cerrarModalAdjuntos()">✕</button>
     </div>
-    <div class="ps-modal-body">
+    <div class="ps-modal-body ps-dropzone" id="adj-modal-dropzone"
+         ondragover="event.preventDefault(); this.classList.add('ps-dropzone-activa');"
+         ondragleave="this.classList.remove('ps-dropzone-activa');"
+         ondrop="manejarDropAdjuntoModal(event)">
       <div id="adj-modal-lista"></div>
       <label class="ps-file-btn" style="margin-bottom:0;align-self:flex-start;">
-        + Agregar archivo
+        + Agregar archivo <span style="font-weight:400;color:var(--ps-muted);">(o arrastralo acá)</span>
         <input type="file" id="adj-modal-file" onchange="agregarAdjuntoModal(this)">
       </label>
     </div>
@@ -1824,7 +1829,8 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
         </div>
         <div class="ps-field">
           <label>Tema</label>
-          <input class="ps-input" id="pg-tema" placeholder="Ej: AGUA">
+          <input class="ps-input" id="pg-tema" list="pg-temas-existentes" placeholder="Ej: AGUA" oninput="autocompletarAccionPrograma()">
+          <datalist id="pg-temas-existentes"></datalist>
         </div>
       </div>
       <div class="ps-field">
@@ -2172,6 +2178,12 @@ async function renderListaAdjuntosModal() {
 async function agregarAdjuntoModal(inputEl) {
   const archivo = inputEl.files[0];
   if (!archivo) return;
+  await subirAdjuntoModalDesdeArchivo(archivo);
+  inputEl.value = '';
+}
+
+async function subirAdjuntoModalDesdeArchivo(archivo) {
+  if (!archivo) return;
   try {
     const url = await subirArchivoGA(archivo, _adjCarpeta);
     const resp = await fetch(GA_TABLA_ADJUNTOS, {
@@ -2180,13 +2192,19 @@ async function agregarAdjuntoModal(inputEl) {
       body: JSON.stringify({ tabla: _adjTabla, registro_id: _adjRegistroId, nombre: archivo.name, url }),
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    inputEl.value = '';
     renderListaAdjuntosModal();
     if (typeof _adjOnAdd === 'function') await _adjOnAdd();
     if (typeof _adjOnCambio === 'function') await _adjOnCambio();
   } catch (err) {
     alert('No se pudo subir el archivo: ' + err.message);
   }
+}
+
+function manejarDropAdjuntoModal(event) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('ps-dropzone-activa');
+  const archivo = event.dataTransfer.files[0];
+  if (archivo) subirAdjuntoModalDesdeArchivo(archivo);
 }
 
 async function eliminarAdjunto(id) {
@@ -4104,7 +4122,8 @@ function poblarFiltroAnioPrograma() {
 function renderProgramaMonitoreo() {
   poblarFiltroAnioPrograma();
   const anioFiltro = document.getElementById('filtro-anio-programa').value;
-  const items = programaMonitoreo.filter(p => String(p.anio) === anioFiltro).sort((a,b) => (a.tema||'').localeCompare(b.tema||'') || (a.base||'').localeCompare(b.base||''));
+  const normalizar = s => (s || '').trim().toLowerCase();
+  const items = programaMonitoreo.filter(p => String(p.anio) === anioFiltro).sort((a,b) => normalizar(a.tema).localeCompare(normalizar(b.tema)) || (a.base||'').localeCompare(b.base||''));
 
   const tbody = document.getElementById('tbody-programa-monitoreo');
   const empty = document.getElementById('prog-empty');
@@ -4113,7 +4132,7 @@ function renderProgramaMonitoreo() {
   let grupoActual = null; // clave: tema + '||' + accion
 
   items.forEach(p => {
-    const claveGrupo = (p.tema || '') + '||' + (p.accion || '');
+    const claveGrupo = normalizar(p.tema) + '||' + normalizar(p.accion);
     if (claveGrupo !== grupoActual) {
       grupoActual = claveGrupo;
       filasHtml += `
@@ -4304,8 +4323,23 @@ async function importarProgramaExcel() {
 
 function abrirModalProgramaItem() {
   document.getElementById('pg-anio').value = hoy().getFullYear();
+  const temasUnicos = [...new Set(programaMonitoreo.map(p => p.tema).filter(Boolean))].sort();
+  document.getElementById('pg-temas-existentes').innerHTML = temasUnicos.map(t => `<option value="${t}">`).join('');
   document.getElementById('modal-programa-item').classList.add('active');
 }
+
+// Si el Tema tipeado coincide (sin importar mayúsculas/espacios) con uno ya cargado, autocompleta
+// la Acción con la que ya se usó — así no hay que re-escribirla y queda agrupado bien.
+function autocompletarAccionPrograma() {
+  const temaTipeado = document.getElementById('pg-tema').value.trim().toLowerCase();
+  if (!temaTipeado) return;
+  const existente = programaMonitoreo.find(p => (p.tema || '').trim().toLowerCase() === temaTipeado && p.accion);
+  const campoAccion = document.getElementById('pg-accion');
+  if (existente && !campoAccion.value.trim()) {
+    campoAccion.value = existente.accion;
+  }
+}
+
 function cerrarModalProgramaItem() {
   document.getElementById('modal-programa-item').classList.remove('active');
   ['pg-anio','pg-tema','pg-accion','pg-base','pg-responsable'].forEach(id => document.getElementById(id).value = '');
@@ -4555,6 +4589,10 @@ async function sincronizarPlanesDeRequisitos() {
 // Lista de informes adjuntos inline dentro del modal de detalle de mes
 async function renderAdjuntosProgramaMesInline(mesId) {
   const cont = document.getElementById('pm-adjuntos');
+  cont.classList.add('ps-dropzone');
+  cont.ondragover = (e) => { e.preventDefault(); cont.classList.add('ps-dropzone-activa'); };
+  cont.ondragleave = () => cont.classList.remove('ps-dropzone-activa');
+  cont.ondrop = (e) => manejarDropAdjuntoProgramaMes(e, mesId);
   cont.innerHTML = '<div style="color:var(--ps-muted);font-size:12px;">Cargando...</div>';
   try {
     const resp = await fetch(`${GA_TABLA_ADJUNTOS}?select=*&tabla=eq.programa_monitoreo_mes&registro_id=eq.${mesId}&order=uploaded_at.asc`, { headers: gaHeaders() });
@@ -4565,7 +4603,7 @@ async function renderAdjuntosProgramaMesInline(mesId) {
         <a href="${a.url}" target="_blank" class="ps-item-chip-text" style="color:#3182ce;text-decoration:none;">📄 ${a.nombre}</a>
         <button class="ps-item-chip-remove" onclick="eliminarAdjuntoProgramaMesInline('${a.id}','${mesId}')" title="Eliminar">✕</button>
       </div>
-    `).join('') : '<div style="color:var(--ps-muted);font-size:12px;margin-bottom:6px;">Sin informes todavía</div>';
+    `).join('') : '<div style="color:var(--ps-muted);font-size:12px;margin-bottom:6px;">Sin informes todavía (arrastrá un archivo acá, o usá el botón)</div>';
     cont.innerHTML = chips + `
       <label class="ps-file-btn" style="margin-top:6px;margin-bottom:0;">
         + Agregar informe
@@ -4579,6 +4617,12 @@ async function renderAdjuntosProgramaMesInline(mesId) {
 async function agregarAdjuntoProgramaMesInline(inputEl, mesId) {
   const archivo = inputEl.files[0];
   if (!archivo) return;
+  await subirAdjuntoProgramaMesDesdeArchivo(archivo, mesId);
+  inputEl.value = '';
+}
+
+async function subirAdjuntoProgramaMesDesdeArchivo(archivo, mesId) {
+  if (!archivo) return;
   try {
     const url = await subirArchivoGA(archivo, 'programa-monitoreo');
     const resp = await fetch(GA_TABLA_ADJUNTOS, {
@@ -4591,6 +4635,13 @@ async function agregarAdjuntoProgramaMesInline(inputEl, mesId) {
   } catch (err) {
     alert('No se pudo subir el informe: ' + err.message);
   }
+}
+
+function manejarDropAdjuntoProgramaMes(event, mesId) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('ps-dropzone-activa');
+  const archivo = event.dataTransfer.files[0];
+  if (archivo) subirAdjuntoProgramaMesDesdeArchivo(archivo, mesId);
 }
 
 async function eliminarAdjuntoProgramaMesInline(id, mesId) {
@@ -5571,6 +5622,10 @@ function cerrarModalDetalleNota() {
 // Lista de adjuntos inline (sin abrir otro modal encima) usada dentro del Detalle de Nota
 async function renderAdjuntosNotaInline(containerId, tabla, notaId) {
   const cont = document.getElementById(containerId);
+  cont.classList.add('ps-dropzone');
+  cont.ondragover = (e) => { e.preventDefault(); cont.classList.add('ps-dropzone-activa'); };
+  cont.ondragleave = () => cont.classList.remove('ps-dropzone-activa');
+  cont.ondrop = (e) => manejarDropAdjuntoNota(e, tabla, notaId, containerId);
   cont.innerHTML = '<div style="color:var(--ps-muted);font-size:12px;">Cargando...</div>';
   const carpeta = tabla === 'notas_original' ? 'notas' : 'notas-respuestas';
   try {
@@ -5582,7 +5637,7 @@ async function renderAdjuntosNotaInline(containerId, tabla, notaId) {
         <a href="${a.url}" target="_blank" class="ps-item-chip-text" style="color:#3182ce;text-decoration:none;">📄 ${a.nombre}</a>
         <button class="ps-item-chip-remove" onclick="eliminarAdjuntoNotaInline('${a.id}','${containerId}','${tabla}','${notaId}')" title="Eliminar">✕</button>
       </div>
-    `).join('') : '<div style="color:var(--ps-muted);font-size:12px;margin-bottom:6px;">Sin archivos todavía</div>';
+    `).join('') : '<div style="color:var(--ps-muted);font-size:12px;margin-bottom:6px;">Sin archivos todavía (arrastrá acá, o usá el botón)</div>';
     cont.innerHTML = chips + `
       <label class="ps-file-btn" style="margin-top:6px;margin-bottom:0;">
         + Agregar archivo
@@ -5595,6 +5650,12 @@ async function renderAdjuntosNotaInline(containerId, tabla, notaId) {
 
 async function agregarAdjuntoNotaInline(inputEl, tabla, notaId, containerId) {
   const archivo = inputEl.files[0];
+  if (!archivo) return;
+  await subirAdjuntoNotaDesdeArchivo(archivo, tabla, notaId, containerId);
+  inputEl.value = '';
+}
+
+async function subirAdjuntoNotaDesdeArchivo(archivo, tabla, notaId, containerId) {
   if (!archivo) return;
   const carpeta = tabla === 'notas_original' ? 'notas' : 'notas-respuestas';
   try {
@@ -5609,6 +5670,13 @@ async function agregarAdjuntoNotaInline(inputEl, tabla, notaId, containerId) {
   } catch (err) {
     alert('No se pudo subir el archivo: ' + err.message);
   }
+}
+
+function manejarDropAdjuntoNota(event, tabla, notaId, containerId) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('ps-dropzone-activa');
+  const archivo = event.dataTransfer.files[0];
+  if (archivo) subirAdjuntoNotaDesdeArchivo(archivo, tabla, notaId, containerId);
 }
 
 async function eliminarAdjuntoNotaInline(id, containerId, tabla, notaId) {
