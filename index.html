@@ -502,8 +502,6 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           <button class="ps-btn ps-btn-primary" onclick="abrirModalPermiso()">+ Nuevo permiso</button>
         </div>
 
-        <div id="perm-alerta-sueltos"></div>
-
         <div class="ps-filters">
           <div class="ps-field">
             <label>Tipo</label>
@@ -2794,15 +2792,6 @@ function renderPermisos() {
 
   const conEstado = obtenerPermisosCombinados();
 
-  const sueltos = conEstado.filter(p => p._origen === 'permiso');
-  const alertaEl = document.getElementById('perm-alerta-sueltos');
-  if (alertaEl) {
-    alertaEl.innerHTML = sueltos.length ? `
-      <div style="background:#feebc8;color:#7c4a03;padding:10px 16px;border-radius:10px;margin-bottom:14px;font-size:13px;font-weight:600;">
-        ⚠️ ${sueltos.length} permiso${sueltos.length>1?'s':''} cargado${sueltos.length>1?'s':''} suelto${sueltos.length>1?'s':''}, sin vincular a ningún Requisito de la Matriz — considerá cargarlo${sueltos.length>1?'s':''} ahí como corresponde.
-      </div>` : '';
-  }
-
   const filtrados = conEstado.filter(p =>
     (!tFiltro || p.tipo === tFiltro) &&
     (!eFiltro || p.estadoCalc === eFiltro) &&
@@ -2841,10 +2830,9 @@ function renderPermisos() {
     </tr>`;
     } else {
       filasHtml += `
-    <tr style="background:#fffaf0;">
+    <tr>
       <td>
         <span class="ps-td-1line" title="${p.tipo}"><strong>${p.tipo}</strong></span>
-        <div style="font-size:10.5px;color:#c05621;margin-top:2px;font-weight:600;">⚠️ No vinculado a la Matriz de Requisitos</div>
       </td>
       <td><span class="ps-td-clamp" title="${p.organismo}">${p.organismo}</span></td>
       <td>${formatFecha(p.emision)}</td>
