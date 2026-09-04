@@ -315,9 +315,13 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
         </div>
         <div class="ps-card">
           <div class="ps-card-icon ps-icon-red">✉️</div>
-          <div class="ps-card-label">Notas sin responder</div>
-          <div class="ps-card-value" id="dash-notas-value">—</div>
-          <div class="ps-card-sub">Abiertas o vencidas</div>
+          <div class="ps-card-label">Notas</div>
+          <div style="display:flex;gap:5px;justify-content:center;margin-bottom:6px;flex-wrap:wrap;">
+            <span id="dash-notas-recibidas" style="background:#e2e8f0;color:#2d3748;padding:4px 9px;border-radius:20px;font-weight:800;font-size:13px;">—</span>
+            <span id="dash-notas-respondidas" style="background:#c6f6d5;color:#276749;padding:4px 9px;border-radius:20px;font-weight:800;font-size:13px;">—</span>
+            <span id="dash-notas-sinresponder" style="background:#fed7d7;color:#9b2c2c;padding:4px 9px;border-radius:20px;font-weight:800;font-size:13px;">—</span>
+          </div>
+          <div class="ps-card-sub">📥 Recibidas · ✅ Respondidas · ✉️ Sin responder</div>
         </div>
         <div class="ps-card">
           <div class="ps-card-icon ps-icon-blue">🚦</div>
@@ -6300,10 +6304,17 @@ function renderDashboard() {
     }
   }
 
-  // Notas sin responder
+  // Notas: recibidas / respondidas / sin responder
   if (typeof notas !== 'undefined') {
-    const sinResponder = notas.filter(n => estadoNota(n) !== 'Respondida').length;
-    document.getElementById('dash-notas-value').textContent = sinResponder;
+    const recibidas = notas.length;
+    const respondidas = notas.filter(n => estadoNota(n) === 'Respondida').length;
+    const sinResponder = recibidas - respondidas;
+    const elRec = document.getElementById('dash-notas-recibidas');
+    const elResp = document.getElementById('dash-notas-respondidas');
+    const elSin = document.getElementById('dash-notas-sinresponder');
+    if (elRec) elRec.textContent = `📥 ${recibidas}`;
+    if (elResp) elResp.textContent = `✅ ${respondidas}`;
+    if (elSin) elSin.textContent = `✉️ ${sinResponder}`;
   }
 
   // Semáforo de tareas del Programa Anual de Monitoreos correspondientes a este mes
