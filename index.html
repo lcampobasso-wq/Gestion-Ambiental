@@ -1476,13 +1476,17 @@ textarea.ps-input { min-width: 100%; resize: vertical; min-height: 60px; }
           </select>
         </div>
         <div class="ps-field">
-          <label>Organismo</label>
+          <label>Autoridad de Aplicación</label>
           <input class="ps-input" id="p-organismo" placeholder="Ej: Secretaría de Ambiente">
         </div>
       </div>
       <div class="ps-field" id="p-tipo-otro-wrap" style="display:none;">
         <label>Especificar nombre del permiso</label>
         <input class="ps-input" id="p-tipo-otro" placeholder="Ej: Certificado de estanqueidad" style="width:100%;">
+      </div>
+      <div class="ps-field">
+        <label>Base / Ubicación (opcional, si aplica más de una)</label>
+        <input class="ps-input" id="p-base" placeholder="Ej: Cerro Dragón" style="width:100%;">
       </div>
       <div class="ps-row-2">
         <div class="ps-field">
@@ -2793,7 +2797,7 @@ function obtenerPermisosCombinados() {
   // Se muestran siempre como dos columnas separadas (nunca se mezclan ni se rellenan una con la otra).
   const permisosReales = permisos.map(p => ({
     ...p, estadoCalc: calcularEstadoPermiso(p.vencimiento), _origen: 'permiso',
-    autoridad: p.organismo || null, base: null,
+    autoridad: p.organismo || null, base: p.base || null,
   }));
 
   const requisitosConVenc = requisitoVigencias.map(v => {
@@ -2929,6 +2933,7 @@ function editarPermiso(id) {
   }
   toggleTipoPermisoOtro();
   document.getElementById('p-organismo').value = p.organismo || '';
+  document.getElementById('p-base').value = p.base || '';
   document.getElementById('p-emision').value = p.emision || '';
   document.getElementById('p-vencimiento').value = p.vencimiento;
   document.getElementById('modal-permiso').classList.add('active');
@@ -2950,7 +2955,7 @@ async function eliminarPermiso(id) {
 
 function cerrarModalPermiso() {
   document.getElementById('modal-permiso').classList.remove('active');
-  ['p-organismo','p-emision','p-vencimiento','p-tipo-otro'].forEach(id => document.getElementById(id).value = '');
+  ['p-organismo','p-base','p-emision','p-vencimiento','p-tipo-otro'].forEach(id => document.getElementById(id).value = '');
   _permisoEditId = null;
 }
 
@@ -2970,6 +2975,7 @@ async function guardarPermiso() {
   const datos = {
     tipo: tipoSeleccionado === 'Otro' ? tipoOtro : tipoSeleccionado,
     organismo,
+    base: document.getElementById('p-base').value.trim() || null,
     emision: document.getElementById('p-emision').value || null,
     vencimiento,
   };
