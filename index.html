@@ -3252,6 +3252,7 @@ function estadoNota(nota) {
   const items = planesAccion.filter(p => p.nota_id === nota.id);
   const total = items.length;
   const cumplidos = items.filter(p => p.estado === 'Cumplido').length;
+  if (nota.respuesta_fecha) return 'Respondida'; // se adjuntó la respuesta (o se cargó la fecha a mano)
   if (total > 0 && cumplidos === total) return 'Respondida';
   if (new Date(nota.fecha_limite) < hoy()) return 'Vencida';
   return 'Abierta';
@@ -5753,6 +5754,24 @@ async function subirAdjuntoNotaDesdeArchivo(archivo, tabla, notaId, containerId)
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     renderAdjuntosNotaInline(containerId, tabla, notaId);
+
+    // Al adjuntar el archivo de respuesta, marca la fecha de respuesta (si no la tenía)
+    // para que la nota pase a "Respondida" automáticamente.
+    if (tabla === 'notas_respuesta') {
+      const nota = notas.find(n => n.id === notaId);
+      if (nota && !nota.respuesta_fecha) {
+        const respFecha = await fetch(`${GA_TABLA_NOTAS}?id=eq.${notaId}`, {
+          method: 'PATCH',
+          headers: gaHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+          body: JSON.stringify({ respuesta_fecha: hoy().toISOString().slice(0,10) }),
+        });
+        if (respFecha.ok) {
+          const [actualizada] = await respFecha.json();
+          Object.assign(nota, actualizada);
+          if (typeof renderNotas === 'function') renderNotas();
+        }
+      }
+    }
   } catch (err) {
     alert('No se pudo subir el archivo: ' + err.message);
   }
