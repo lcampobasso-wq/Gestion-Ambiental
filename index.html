@@ -2126,14 +2126,20 @@ function gaHeaders(extra) {
 
 // Sube un archivo al bucket propio y devuelve su URL pública
 async function subirArchivoGA(archivo, carpeta) {
-  const nombreLimpio = archivo.name.replace(/\s+/g, '_');
+  // Reemplaza cualquier caracter que no sea letra/número/guión/punto (espacios, acentos, ñ, paréntesis, etc.)
+  // — evitaba errores 400 con nombres de archivo "raros".
+  const nombreLimpio = archivo.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.\-]/g, '_');
   const path = `${carpeta}/${Date.now()}_${nombreLimpio}`;
   const resp = await fetch(`${GA_SUPABASE_URL}/storage/v1/object/${GA_STORAGE_BUCKET}/${path}`, {
     method: 'POST',
     headers: gaHeaders({ 'Content-Type': archivo.type || 'application/octet-stream' }),
     body: archivo,
   });
-  if (!resp.ok) throw new Error('No se pudo subir el archivo (HTTP ' + resp.status + ')');
+  if (!resp.ok) {
+    let detalle = '';
+    try { const j = await resp.json(); detalle = j.message || j.error || ''; } catch (e) { /* respuesta no era JSON */ }
+    throw new Error(`No se pudo subir el archivo (HTTP ${resp.status}${detalle ? ' — ' + detalle : ''})`);
+  }
   return `${GA_SUPABASE_URL}/storage/v1/object/public/${GA_STORAGE_BUCKET}/${path}`;
 }
 
