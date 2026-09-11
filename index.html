@@ -2137,7 +2137,7 @@ async function subirArchivoGA(archivo, carpeta) {
   });
   if (!resp.ok) {
     let detalle = '';
-    try { const j = await resp.json(); detalle = j.message || j.error || ''; } catch (e) { /* respuesta no era JSON */ }
+    try { detalle = (await resp.text()).slice(0, 300); } catch (e) { /* no se pudo leer el cuerpo de la respuesta */ }
     throw new Error(`No se pudo subir el archivo (HTTP ${resp.status}${detalle ? ' — ' + detalle : ''})`);
   }
   return `${GA_SUPABASE_URL}/storage/v1/object/public/${GA_STORAGE_BUCKET}/${path}`;
